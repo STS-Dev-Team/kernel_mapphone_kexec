@@ -506,7 +506,7 @@ handle_level_irq(unsigned int irq, struct irq_desc *desc)
 out_unlock:
 	raw_spin_unlock(&desc->lock);
 
-	printk("LIRQ: %d\n", irq);
+//	printk("LIRQ: %d\n", irq);
 }
 EXPORT_SYMBOL_GPL(handle_level_irq);
 

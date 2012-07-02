@@ -6232,7 +6232,7 @@ static __initdata struct omap_hwmod *omap44xx_hwmods[] = {
 	/* uart class */
 	&omap44xx_uart1_hwmod,
 	&omap44xx_uart2_hwmod,
-	&omap44xx_uart3_hwmod,
+//	&omap44xx_uart3_hwmod,
 	&omap44xx_uart4_hwmod,
 	/* usb_host_fs class */
 /*	&omap44xx_usb_host_fs_hwmod, */

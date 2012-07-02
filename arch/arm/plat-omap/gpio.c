@@ -1256,7 +1256,7 @@ static void gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 	if (!unmasked)
 		desc->chip->unmask(irq);
 
-	printk("GIRQ: %d\n", irq);
+//	printk("GIRQ: %d\n", irq);
 
 }
 

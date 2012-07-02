@@ -228,11 +228,10 @@ void __init usb_musb_init(struct omap_musb_board_data *board_data)
 			printk(KERN_INFO "USB MUSB Post-Initial value "
 					"of CLKCTRL is 0x%x \n", usb_clkctrl);
 		}
-		/*powerdown the phy*/
-		omap_writel(PHY_PD, DIE_ID_REG_BASE + CONTROL_DEV_CONF);
-
 
 	}
+		/*powerdown the phy*/
+		omap_writel(PHY_PD, DIE_ID_REG_BASE + CONTROL_DEV_CONF);
 }
 
 void musb_context_save_restore(enum musb_state state)

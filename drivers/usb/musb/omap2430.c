@@ -92,6 +92,8 @@ static int set_phy_clk(int on)
 
 static int phy_init(void)
 {
+	printk("PHY Init\n");
+	return 0;
 	set_phy_clk(1);
 
 	if (__raw_readl(ctrl_base + CONTROL_DEV_CONF) & PHY_PD) {
