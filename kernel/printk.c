@@ -1311,8 +1311,8 @@ void register_console(struct console *newcon)
 	unsigned long flags;
 	struct console *bcon = NULL;
 
-	if(!(newcon->flags & CON_BOOT))
-		return;
+//	if(!(newcon->flags & CON_BOOT))
+//		return;
 
 	/*
 	 * before we register a new CON_BOOT console, make sure we don't
@@ -1400,7 +1400,7 @@ void register_console(struct console *newcon)
 	 * the real console are the same physical device, it's annoying to
 	 * see the beginning boot messages twice
 	 */
-	if (bcon && ((newcon->flags & (CON_CONSDEV | CON_BOOT)) == CON_CONSDEV))
+//	if (bcon && ((newcon->flags & (CON_CONSDEV | CON_BOOT)) == CON_CONSDEV))
 		newcon->flags &= ~CON_PRINTBUFFER;
 
 	/*
