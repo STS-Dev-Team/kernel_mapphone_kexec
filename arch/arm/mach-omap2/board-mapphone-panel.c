@@ -173,7 +173,7 @@ static void mapphone_panel_reset(bool enable)
 static int mapphone_panel_regulator_enable(void)
 {
 	if (!display_regulator) {
-		PANELDBG("Display power supply = %s\n",
+		printk("Display power supply = %s\n",
 				 mapphone_displ_pwr_sup);
 		display_regulator = regulator_get(NULL, mapphone_displ_pwr_sup);
 		if (IS_ERR(display_regulator)) {
@@ -847,6 +847,8 @@ void __init mapphone_panel_init(void)
 		/* Remove HDTV from the DSS device list */
 		mapphone_dss_data.num_devices--;
 	}
+
+	mapphone_panel_reset(1);
 
 	platform_device_register(&omap_panel_device);
 	omap_display_init(&mapphone_dss_data);

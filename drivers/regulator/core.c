@@ -1108,13 +1108,16 @@ static struct regulator *_regulator_get(struct device *dev, const char *id,
 	mutex_lock(&regulator_list_mutex);
 
 	list_for_each_entry(map, &regulator_map_list, list) {
-		/* If the mapping has a device set up it must match */
-		if (map->dev_name &&
-		    (!devname || strcmp(map->dev_name, devname)))
-			continue;
-
 		if (strcmp(map->supply, id) == 0) {
 			rdev = map->regulator;
+			/* If the mapping has a device set up it must match */
+			if (map->dev_name &&
+			    (!devname || strcmp(map->dev_name, devname)))
+			{
+				printk("Found requested regulator, but it is reserved for: %s\n", map->dev_name);
+				continue;
+			}
+
 			goto found;
 		}
 	}
@@ -1350,6 +1353,8 @@ int regulator_enable(struct regulator *regulator)
 {
 	struct regulator_dev *rdev = regulator->rdev;
 	int ret = 0;
+
+	printk("Rdev: %p\n", rdev);
 
 	mutex_lock(&rdev->mutex);
 	ret = _regulator_enable(rdev);
