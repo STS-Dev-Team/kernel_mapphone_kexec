@@ -638,14 +638,21 @@ static int __init pwrdms_setup(struct powerdomain *pwrdm, void *unused)
 	if (!pwrst)
 		return -ENOMEM;
 	pwrst->pwrdm = pwrdm;
+
+	printk("Set pwrdm_state :%s\n", pwrdm->name);
+
 	if ((!strcmp(pwrdm->name, mpu_pwrdm->name)) ||
 			(!strcmp(pwrdm->name, core_pwrdm->name)) ||
-			(!strcmp(pwrdm->name, cpu0_pwrdm->name)) ||
-			(!strcmp(pwrdm->name, cpu1_pwrdm->name)))
+			(!strcmp(pwrdm->name, cpu0_pwrdm->name)))// ||
+//			(!strcmp(pwrdm->name, cpu1_pwrdm->name)))
 		pwrst->next_state = PWRDM_POWER_ON;
 	else
 		pwrst->next_state = PWRDM_POWER_RET;
 	list_add(&pwrst->node, &pwrst_list);
+
+	if (!strcmp( pwrdm->name,cpu1_pwrdm->name))
+		pwrst->next_state = PWRDM_POWER_OFF;
+
 
 	if (!strcmp("dss_pwrdm", pwrdm->name))
 		return omap4_set_pwrdm_state(pwrst->pwrdm,
@@ -844,6 +851,8 @@ static void __init prcm_clear_statdep_regs(void)
 	/* SDMA towards EMIF, L3_2, L3_1, L4CFG, L4WKUP, L3INIT
 	 * and L4PER clockdomains
 	*/
+
+	printk("SDMA Dependencies\n");
 	reg = OMAP4430_MEMIF_STATDEP_MASK | OMAP4430_L3_1_STATDEP_MASK
 		| OMAP4430_L3_2_STATDEP_MASK | OMAP4430_L4CFG_STATDEP_MASK
 		| OMAP4430_L4WKUP_STATDEP_MASK | OMAP4430_L4PER_STATDEP_MASK
@@ -851,21 +860,25 @@ static void __init prcm_clear_statdep_regs(void)
 	cm_rmw_mod_reg_bits(reg, 0, OMAP4430_CM2_CORE_MOD,
 		OMAP4_CM_SDMA_STATICDEP_OFFSET);
 
+	printk("C2C Dependencies\n");
 	/* C2C towards EMIF clockdomains */
 	cm_rmw_mod_reg_bits(OMAP4430_MEMIF_STATDEP_MASK, 0,
 		OMAP4430_CM2_CORE_MOD, OMAP4_CM_D2D_STATICDEP_OFFSET);
 
+	printk("C2C Restore Dependencies\n");
 	/* C2C_STATICDEP_RESTORE towards EMIF clockdomains */
 	cm_rmw_mod_reg_bits(OMAP4430_MEMIF_STATDEP_MASK, 0,
 			OMAP4430_CM2_RESTORE_MOD,
 			OMAP4_CM_D2D_STATICDEP_RESTORE_OFFSET);
 
+	printk("SDMA Restore Dependencies\n");
 	 /* SDMA_RESTORE towards EMIF, L3_1, L4_CFG,L4WKUP clockdomains */
 	reg = OMAP4430_MEMIF_STATDEP_MASK | OMAP4430_L3_1_STATDEP_MASK
 		| OMAP4430_L4CFG_STATDEP_MASK | OMAP4430_L4WKUP_STATDEP_MASK;
 	cm_rmw_mod_reg_bits(reg, 0, OMAP4430_CM2_RESTORE_MOD,
 		OMAP4_CM_SDMA_STATICDEP_RESTORE_OFFSET);
 #endif
+	printk("Prcm clear stat dep done\n");
 };
 
 /**
@@ -903,6 +916,8 @@ static int __init omap4_pm_init(void)
 		goto err2;
 	}
 
+	printk("Allocate SO Ram\n");
+
 	so_ram_address = (void *)dma_alloc_so_coherent(NULL, 1024,
 			(dma_addr_t *)&ram_addr, GFP_KERNEL);
 
@@ -910,6 +925,8 @@ static int __init omap4_pm_init(void)
 		printk ("omap4_pm_init: failed to allocate SO mem.\n");
 		return -ENOMEM;
 	}
+
+	printk("Pwrdm for each setup\n");
 
 	ret = pwrdm_for_each(pwrdms_setup, NULL);
 	if (ret) {
@@ -922,6 +939,8 @@ static int __init omap4_pm_init(void)
 		printk(KERN_ERR "Failed to get lookup for MPU pwrdm's\n");
 		goto err2;
 	}
+
+	printk("Clkdm for each\n");
 
 	(void) clkdm_for_each(clkdms_setup, NULL);
 
@@ -944,21 +963,28 @@ static int __init omap4_pm_init(void)
 		goto err2;
 	}
 
+	printk("Mpuss init\n");
+
 	omap4_mpuss_init();
 #endif
 
+	printk("Suspend set ops\n");
 #ifdef CONFIG_SUSPEND
 	suspend_set_ops(&omap_pm_ops);
 #endif /* CONFIG_SUSPEND */
 
+	printk("Omap idle init\n");
 	omap4_idle_init();
+	printk("Omap trigger ioctl\n");
 	omap4_trigger_ioctrl();
-
+	
+	printk("Pm dbg regset\n");
 	pm_dbg_regset_init(1);
 	pm_dbg_regset_init(2);
 	pm_dbg_regset_init(3);
 	pm_dbg_regset_init(4);
 
+	printk("Omap pm init done\n");
 err2:
 	return ret;
 }
