@@ -299,6 +299,8 @@ obj-$(CONFIG_MACH_MAPPHONE)		+= board-mapphone.o \
 					   pmic-max8952.o	\
 					   pmic-cpcap.o
 
+obj-$(CONFIG_EMU_UART_DEBUG)		+= board-mapphone-emu_uart.o
+
 obj-$(CONFIG_MACH_OMAP3517EVM)		+= board-am3517evm.o \
 					   omap_phy_internal.o \
 
