@@ -705,7 +705,10 @@ static void __init do_initcalls(void)
 	initcall_t *fn;
 
 	for (fn = __early_initcall_end; fn < __initcall_end; fn++)
+	{
+		printk("Do initcall %pF\n", *fn);
 		do_one_initcall(*fn);
+	}
 }
 
 /*
@@ -717,6 +720,7 @@ static void __init do_initcalls(void)
  */
 static void __init do_basic_setup(void)
 {
+	printk("Do basic setup\n");
 	cpuset_init_smp();
 	usermodehelper_init();
 	init_tmpfs();
@@ -724,6 +728,7 @@ static void __init do_basic_setup(void)
 	init_irq_proc();
 	do_ctors();
 	do_initcalls();
+	printk("Do basic setup done\n");
 }
 
 static void __init do_pre_smp_initcalls(void)
