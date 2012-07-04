@@ -384,7 +384,8 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 		 * Enable the local timer or broadcast device for the
 		 * boot CPU, but only if we have more than one CPU.
 		 */
-		percpu_timer_setup();
+//TODO: fubar	
+//	percpu_timer_setup();
 
 		/*
 		 * Initialise the SCU if there are more than one CPU
@@ -470,9 +471,12 @@ asmlinkage void __exception_irq_entry do_local_timer(struct pt_regs *regs)
 
 	if (local_timer_ack()) {
 		__inc_irq_stat(cpu, local_timer_irqs);
-		irq_enter();
-		ipi_timer();
-		irq_exit();
+		if(irq_enter)
+			irq_enter();
+		if(ipi_timer)
+			ipi_timer();
+		if(irq_exit)
+			irq_exit();
 	}
 
 	set_irq_regs(old_regs);
