@@ -69,7 +69,7 @@
 #include "board-mapphone.h"
 #include "board-mapphone-sensors.h"
 #include "board-mapphone-padconf.h"
-#include "omap4_ion.h"
+#include <mach/omap4_ion.h>
 #include "mux.h"
 #include "hsmmc.h"
 #include "timer-gp.h"
@@ -394,12 +394,18 @@ struct platform_device motsoc1_platform_device = {
 
 static void __init mapphone_init_early(void)
 {
+	printk("init common infrastructure\n");
 	omap2_init_common_infrastructure();
+	printk("init common devices\n");
 	omap2_init_common_devices(NULL, NULL);
+	printk("set gptimer\n");
 #ifdef CONFIG_OMAP_32K_TIMER
 	omap2_gp_clockevent_set_gptimer(1);
 #endif
 
+	printk("unflattening device tree\n");
+//TODO: this seems dissimilar from the device tree code on .35. maybe it won't work. disable for now
+#if 1 
 	if (fdt_start_address) {
 		struct device_node *machine_node;
 		const void *machine_prop;
@@ -429,6 +435,8 @@ static void __init mapphone_init_early(void)
 		}
 
 	}
+#endif
+	printk("done\n");
 }
 
 static void omap4_audio_conf(void)

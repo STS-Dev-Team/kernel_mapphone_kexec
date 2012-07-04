@@ -25,6 +25,7 @@
 #include <plat/remoteproc.h>
 #include <plat/dsp.h>
 #include <plat/io.h>
+#include <plat/common.h>
 #include "cm2_44xx.h"
 #include "cm-regbits-44xx.h"
 
