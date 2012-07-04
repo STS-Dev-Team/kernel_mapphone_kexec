@@ -620,11 +620,15 @@ asmlinkage void __init start_kernel(void)
 
 	check_bugs();
 
+	printk("acpi init\n");
 	acpi_early_init(); /* before LAPIC and SMP init */
+	printk("sfi init\n");
 	sfi_init_late();
 
+	printk("ftrace init\n");
 	ftrace_init();
 
+	printk("rest init\n");
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
 }
@@ -727,7 +731,10 @@ static void __init do_pre_smp_initcalls(void)
 	initcall_t *fn;
 
 	for (fn = __initcall_start; fn < __early_initcall_end; fn++)
+	{
+		printk("Calling pre smp initcall %p %pF\n", *fn, *fn);
 		do_one_initcall(*fn);
+	}
 }
 
 static void run_init_process(const char *init_filename)
@@ -794,14 +801,22 @@ static int __init kernel_init(void * unused)
 
 	cad_pid = task_pid(current);
 
+	printk("smp prepare\n");
+
 	smp_prepare_cpus(setup_max_cpus);
 
+	printk("do pre smp initcalls\n");
 	do_pre_smp_initcalls();
+
+	printk("lockup detector\n");
 	lockup_detector_init();
 
+	printk("smp init\n");
 	smp_init();
+	printk("sched init\n");
 	sched_init_smp();
 
+	printk("do basic setup\n");
 	do_basic_setup();
 
 	/* Open the /dev/console on the rootfs, this should never fail */
