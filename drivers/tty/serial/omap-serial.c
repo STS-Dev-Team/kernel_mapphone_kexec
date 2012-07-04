@@ -1675,6 +1675,9 @@ static int serial_omap_probe(struct platform_device *pdev)
 	struct omap_uart_port_info *omap_up_info = pdev->dev.platform_data;
 	struct omap_device *od;
 	int ret = -ENOSPC;
+	
+	//TODO: clock problems on uart1 make this fail
+	return ret;
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
