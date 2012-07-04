@@ -385,7 +385,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 		 * boot CPU, but only if we have more than one CPU.
 		 */
 //TODO: fubar	
-//	percpu_timer_setup();
+		percpu_timer_setup();
 
 		/*
 		 * Initialise the SCU if there are more than one CPU
