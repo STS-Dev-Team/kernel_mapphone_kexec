@@ -1467,6 +1467,8 @@ static void __init mapphone_map_io(void)
 }
 static void __init mapphone_reserve(void)
 {
+	omap_init_ram_size();
+
 	omap_ram_console_init(OMAP4_RAMCONSOLE_START,
 			OMAP4_RAMCONSOLE_SIZE);
 
