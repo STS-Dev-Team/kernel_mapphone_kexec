@@ -646,6 +646,8 @@ static struct platform_driver mdm6x00_ctrl_driver = {
 
 static int __init mdm6600_ctrl_init(void)
 {
+	//TODO: unknown crashing
+	return -1;
 	pr_debug("%s: initializing %s\n",
 		__func__, mdm6x00_ctrl_driver.driver.name);
 	return platform_driver_register(&mdm6x00_ctrl_driver);
