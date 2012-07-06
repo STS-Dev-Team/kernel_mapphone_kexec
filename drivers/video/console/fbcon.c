@@ -647,7 +647,17 @@ static void fbcon_prepare_logo(struct vc_data *vc, struct fb_info *info,
 #ifdef CONFIG_FB_TILEBLITTING
 static void set_blitting_type(struct vc_data *vc, struct fb_info *info)
 {
+	printk("%s Info: %p\n", __func__, info);
+
 	struct fbcon_ops *ops = info->fbcon_par;
+
+	printk("%s Ops: %p\n", __func__, ops);
+
+	printk("%s Vc: %p\n", __func__, vc);
+
+	printk("%s Vc num: d\n", __func__, vc->num);
+
+	printk("%s fb_display: %p\n", __func__, fb_display);
 
 	ops->p = &fb_display[vc->vc_num];
 
@@ -672,7 +682,16 @@ static int fbcon_invalid_charcount(struct fb_info *info, unsigned charcount)
 #else
 static void set_blitting_type(struct vc_data *vc, struct fb_info *info)
 {
+	printk("%s Info: %p\n", __func__, info);
 	struct fbcon_ops *ops = info->fbcon_par;
+
+	printk("%s Ops: %p\n", __func__, ops);
+
+	printk("%s Vc: %p\n", __func__, vc);
+
+	printk("%s Vc num: d\n", __func__, vc->vc_num);
+
+	printk("%s fb_display: %p\n", __func__, fb_display);
 
 	info->flags &= ~FBINFO_MISC_TILEBLITTING;
 	ops->p = &fb_display[vc->vc_num];
