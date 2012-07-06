@@ -127,9 +127,8 @@ int omap4_charger_detect(void)
 	/* enable the clocks */
 	omap4430_phy_set_clk(NULL, 1);
 	/* power on the phy */
-//TODO: just for debugging
-//	if ((val = __raw_readl(ctrl_base + CONTROL_DEV_CONF)) & PHY_PD)
-//		__raw_writel((val & ~PHY_PD), ctrl_base + CONTROL_DEV_CONF);
+	if ((val = __raw_readl(ctrl_base + CONTROL_DEV_CONF)) & PHY_PD)
+		__raw_writel((val & ~PHY_PD), ctrl_base + CONTROL_DEV_CONF);
 
 	msleep_interruptible(200);
 
@@ -213,11 +212,10 @@ int omap4430_phy_suspend(struct device *dev, int suspend)
 		/* Enable the internel phy clcoks */
 		omap4430_phy_set_clk(dev, 1);
 		/* power on the phy */
-//TODO: just for debugging
-//		if (__raw_readl(ctrl_base + CONTROL_DEV_CONF) & PHY_PD) {
-//			__raw_writel(~PHY_PD, ctrl_base + CONTROL_DEV_CONF);
-//			mdelay(200);
-//		}
+		if (__raw_readl(ctrl_base + CONTROL_DEV_CONF) & PHY_PD) {
+			__raw_writel(~PHY_PD, ctrl_base + CONTROL_DEV_CONF);
+			mdelay(200);
+		}
 
 		/* restore the context */
 		__raw_writel(usbotghs_control, ctrl_base + USBOTGHS_CONTROL);
