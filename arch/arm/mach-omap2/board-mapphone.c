@@ -90,9 +90,7 @@
 #include <linux/lm48901.h>
 #endif
 
-#ifdef CONFIG_EMU_UART_DEBUG
 #include <plat/board-mapphone-emu_uart.h>
-#endif
 
 #define WILINK_UART_DEV_NAME "/dev/ttyO3"
 #include <linux/motsoc1.h>
@@ -1423,10 +1421,12 @@ static void __init mapphone_init(void)
 	mapphone_voltage_init();
 	mapphone_omap44xx_padconf_init();
 
-#ifdef CONFIG_EMU_UART_DEBUG
+//#ifdef CONFIG_EMU_UART_DEBUG
 	/* emu-uart function will override devtree iomux setting */
-	activate_emu_uart();
-#endif
+//	activate_emu_uart();
+//#else
+//	deactivate_emu_uart();
+//#endif
 
 	omap4_register_ion();
 	platform_add_devices(mapphone_devices, ARRAY_SIZE(mapphone_devices));

@@ -541,6 +541,32 @@ static void write_omap_mux_register(u16 offset, u8 mode, u8 input_en)
 	omap_writew(reg_val, reg);
 }
 
+#define CONTROL_DEV_CONF                0x300
+#define PHY_PD				(1 << 0)
+
+#ifdef CONFIG_ARCH_OMAP4
+#define DIE_ID_REG_BASE         (L4_44XX_PHYS + 0x2000)
+#define DIE_ID_REG_OFFSET               0x200
+#else
+#define DIE_ID_REG_BASE         (L4_WK_34XX_PHYS + 0xA000)
+#define DIE_ID_REG_OFFSET              
+#endif
+
+void deactivate_emu_uart(void)
+{
+	/*powerup the phy*/
+	//omap_writel(0, DIE_ID_REG_BASE + CONTROL_DEV_CONF);
+
+
+	write_cpcap_register_raw(411, 0x40);//0x4C);//0x0040);
+
+	write_cpcap_register_raw(896, 0x1021);//0x1201);//0x1221 
+
+	write_cpcap_register_raw(897, 0xc008);//0xc020);
+
+	write_cpcap_register_raw(898, 0x3dff);//0x7c20);
+}
+
 void activate_emu_uart(void)
 {
 	int i;

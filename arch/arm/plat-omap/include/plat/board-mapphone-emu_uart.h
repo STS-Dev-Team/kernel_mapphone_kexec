@@ -37,6 +37,7 @@
 #endif
 
 extern void activate_emu_uart(void);
+extern void deactivate_emu_uart(void);
 extern int is_emu_uart_iomux_reg(unsigned short offset);
 extern bool is_emu_uart_active(void);
 
