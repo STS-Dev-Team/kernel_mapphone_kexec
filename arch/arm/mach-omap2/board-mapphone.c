@@ -1487,30 +1487,27 @@ static void __init mapphone_map_io(void)
 }
 static void __init mapphone_reserve(void)
 {
-	omap_init_ram_size();
+#ifdef CONFIG_ION_OMAP_DYNAMIC
+	/* do the static reservations first */
+	memblock_remove(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
 
+	/* ipu needs to recognize secure input buffer area as well */
+	omap_ipu_set_static_mempool(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
+#else
+	/* do the static reservations first */
+	memblock_remove(PHYS_ADDR_SMC_MEM, PHYS_ADDR_SMC_SIZE);
+	memblock_remove(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
+	/* ipu needs to recognize secure input buffer area as well */
+	omap_ipu_set_static_mempool(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE + OMAP4_ION_HEAP_SECURE_INPUT_SIZE);
+#endif
+#ifdef CONFIG_OMAP_REMOTE_PROC_DSP
+	memblock_remove(PHYS_ADDR_TESLA_MEM, PHYS_ADDR_TESLA_SIZE);
+	omap_dsp_set_static_mempool(PHYS_ADDR_TESLA_MEM, PHYS_ADDR_TESLA_SIZE);
+#endif
 
 #ifdef CONFIG_ION_OMAP
 	omap_ion_init();
 #endif
-
-       omap_ram_console_init(OMAP_RAM_CONSOLE_START_DEFAULT,
-                       OMAP_RAM_CONSOLE_SIZE_DEFAULT);
-
-       /* do the static reservations first */
-       memblock_remove(PHYS_ADDR_SMC_MEM, PHYS_ADDR_SMC_SIZE);
-       memblock_remove(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
-       /* ipu needs to recognize secure input buffer area as well */
-       omap_ipu_set_static_mempool(PHYS_ADDR_DUCATI_MEM,
-                                       PHYS_ADDR_DUCATI_SIZE +
-                                       OMAP4_ION_HEAP_SECURE_INPUT_SIZE);
-#ifdef CONFIG_OMAP_REMOTE_PROC_DSP
-       memblock_remove(PHYS_ADDR_TESLA_MEM, PHYS_ADDR_TESLA_SIZE);
-       omap_dsp_set_static_mempool(PHYS_ADDR_TESLA_MEM,
-                                       PHYS_ADDR_TESLA_SIZE);
-#endif
-
-
 	omap_reserve();
 }
 
