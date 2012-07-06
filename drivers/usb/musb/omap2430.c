@@ -132,10 +132,11 @@ static int phy_init(void)
 {
 	set_phy_clk(1);
 
-	if (__raw_readl(ctrl_base + CONTROL_DEV_CONF) & PHY_PD) {
-		__raw_writel(~PHY_PD, ctrl_base + CONTROL_DEV_CONF);
-		msleep(200);
-	}
+//TODO: just for debugging
+//	if (__raw_readl(ctrl_base + CONTROL_DEV_CONF) & PHY_PD) {
+//		__raw_writel(~PHY_PD, ctrl_base + CONTROL_DEV_CONF);
+//		msleep(200);
+//	}
 
 	if (cpu_is_omap44xx()) {
 		if (usb_phy_drive_strength_control())
