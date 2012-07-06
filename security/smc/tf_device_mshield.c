@@ -30,7 +30,6 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/bootmem.h>
-#include <mach/omap4_ion.h>
 
 #include "tf_protocol.h"
 #include "tf_defs.h"
@@ -330,7 +329,7 @@ void __init tf_allocate_workspace(void)
 		dev->workspace_addr = (u32) __pa(__alloc_bootmem(
 			dev->workspace_size, SZ_1M, __pa(MAX_DMA_ADDRESS)));
 #else
-		dev->workspace_addr = (u32) PHYS_ADDR_SMC_MEM;
+		dev->workspace_addr = (u32) 0xBFD00000;
 #endif
 	else
 		dev->workspace_addr = smc_address;
