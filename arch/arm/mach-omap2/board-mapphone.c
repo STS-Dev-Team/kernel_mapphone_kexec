@@ -1151,13 +1151,16 @@ static void __init mapphone_musb_init(void)
 		prop = of_get_property(node, "feature_musb_utmi", &size);
 		if (prop && size) {
 			use_utmi = *(u8 *)prop;
-			pr_debug("Using %s as the MUSB Mode \n",
+			printk("Using %s as the MUSB Mode \n",
 				use_utmi ? "UTMI" : "ULPI");
 
 		} else
-			pr_debug("USB Defaulting to ULPI \n");
+			printk("USB Defaulting to ULPI \n");
 		of_node_put(node);
+	}else{
+		printk("Could not open devtree MUSB Mode\n");
 	}
+	
 
 	node = of_find_node_by_path(DT_PATH_CHOSEN);
 	if (node) {
