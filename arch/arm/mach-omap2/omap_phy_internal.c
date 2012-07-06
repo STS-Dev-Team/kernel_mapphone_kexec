@@ -131,7 +131,6 @@ int omap4_charger_detect(void)
 	if ((val = __raw_readl(ctrl_base + CONTROL_DEV_CONF)) & PHY_PD)
 		__raw_writel((val & ~PHY_PD), ctrl_base + CONTROL_DEV_CONF);
 #endif
-
 	msleep_interruptible(200);
 
 	omap4430_phy_power(NULL, 0, 1);

@@ -1675,9 +1675,6 @@ static int serial_omap_probe(struct platform_device *pdev)
 	struct omap_uart_port_info *omap_up_info = pdev->dev.platform_data;
 	struct omap_device *od;
 	int ret = -ENOSPC;
-	
-	//TODO: clock problems on uart1 make this fail
-	return ret;
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
@@ -1728,6 +1725,10 @@ static int serial_omap_probe(struct platform_device *pdev)
 
 	up->port.mapbase = mem->start;
 	up->port.membase = ioremap(mem->start, mem->end - mem->start);
+
+	printk("Enabling uart clocks\n");
+	od = to_omap_device(up->pdev);
+		omap_hwmod_enable_clocks(od->hwmods[0]);
 
 	if (!up->port.membase) {
 		dev_err(&pdev->dev, "can't ioremap UART\n");

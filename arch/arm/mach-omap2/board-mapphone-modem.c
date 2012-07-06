@@ -641,6 +641,7 @@ static int mapphone_qsc6085_mdm_ctrl_init(void)
 				"from device_tree\n", __func__);
 		return -EINVAL;
 	}
+
 	qsc6085_ctrl_platform_data.gpio_reset_out = gpio;
 
 	platform_device_register(&qsc6085_ctrl_platform_device);
@@ -994,7 +995,7 @@ int __init mapphone_mdm_ctrl_init(void)
 	int i, ret = 0;
 
 	if (bi_powerup_reason() == PU_REASON_CHARGER) {
-		pr_info("Charge Only Mode : No MDMCTRL");
+		printk("Charge Only Mode : No MDMCTRL");
 		return ret;
 	}
 
@@ -1004,7 +1005,7 @@ int __init mapphone_mdm_ctrl_init(void)
 	if (!mapphone_modem.n_modems ||
 		mapphone_modem.n_modems > MAX_MODEMS) {
 
-		pr_err("Invalid BPs #%d Found, Is this a Phone ??",
+		printk("Invalid BPs #%d Found, Is this a Phone ??",
 			mapphone_modem.n_modems);
 		return -ENODEV;
 	}
@@ -1013,31 +1014,31 @@ int __init mapphone_mdm_ctrl_init(void)
 		mapphone_modem.type[i] = mapphone_bp_get_type(i);
 		switch (mapphone_modem.type[i]) {
 		case MAPPHONE_BP_MDM6600:
-			pr_debug("Found Modem MAPPHONE_BP_MDM6600");
+			printk("Found Modem MAPPHONE_BP_MDM6600");
 			ret = mapphone_mdm6600_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_MDM9600:
-			pr_debug("Found Modem MAPPHONE_BP_MDM9600");
+			printk("Found Modem MAPPHONE_BP_MDM9600");
 			ret = mapphone_mdm9600_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_QSC6085:
-			pr_debug("Found Modem MAPPHONE_BP_QSC6085");
+			printk("Found Modem MAPPHONE_BP_QSC6085");
 			ret = mapphone_qsc6085_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_STE_M570:
-			pr_debug("Found Modem MAPPHONE_BP_STE_M570");
+			printk("Found Modem MAPPHONE_BP_STE_M570");
 			ret = mapphone_ste_m570_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_STE_G4852:
-			pr_debug("Found Modem MAPPHONE_BP_STE_G4852");
+			printk("Found Modem MAPPHONE_BP_STE_G4852");
 			ret = mapphone_ste_g4852_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_STE_PNX6718:
-			pr_debug("Found Modem MAPPHONE_BP_STE_PNX6718");
+			printk("Found Modem MAPPHONE_BP_STE_PNX6718");
 			ret = mapphone_ste_pnx6718_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_W3GLTE:
-			pr_debug("Found Modem MAPPHONE_BP_W3GLTE");
+			printk("Found Modem MAPPHONE_BP_W3GLTE");
 			ret = mapphone_w3glte_mdm_ctrl_init();
 			break;
 		default:

@@ -2738,9 +2738,6 @@ static int __init mux_init(void)
 {
 	int err;
 
-	//TODO: dont know what this is. looks dangerous
-	return -1;
-
 	FUNC_ENTER();
 
 	/*/ MSG_MSGDUMP; MSG_INFO; MSG_DEBUG; /*/
