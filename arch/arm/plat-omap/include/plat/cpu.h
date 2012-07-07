@@ -140,6 +140,7 @@ IS_TI_SUBCLASS(816x, 0x816)
 #define cpu_is_omap44xx()		0
 #define cpu_is_omap443x()		0
 #define cpu_is_omap446x()		0
+#define cpu_is_omap447x()		0
 
 #if defined(MULTI_OMAP1)
 # if defined(CONFIG_ARCH_OMAP730)

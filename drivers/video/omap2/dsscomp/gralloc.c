@@ -480,6 +480,8 @@ skip_comp:
 
 	return r;
 }
+EXPORT_SYMBOL(dsscomp_gralloc_queue);
+
 
 #ifdef CONFIG_EARLYSUSPEND
 static int blank_complete;
