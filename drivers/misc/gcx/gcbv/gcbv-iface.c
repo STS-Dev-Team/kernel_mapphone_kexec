@@ -1,5 +1,5 @@
 /*
- * bv_gc2d.c
+ * gcbv-iface.c
  *
  * Copyright (C) 2011, Texas Instruments, Inc.
  *
@@ -14,27 +14,29 @@
 
 #include <linux/module.h>
 #include <linux/bltsville.h>
-#include <linux/bv_gc2d.h>
-#include "bv_gc2d-priv.h"
+#include <linux/gcbv.h>
+#include "gcbv-priv.h"
 
-static struct bventry ops = {NULL, NULL, NULL};
+static struct bventry ops = {
+	.structsize = sizeof(struct bventry),
+};
 
-void bv_gc2d_clearentry(void)
+void gcbv_clear(void)
 {
 	ops.bv_map = NULL;
 	ops.bv_unmap = NULL;
 	ops.bv_blt = NULL;
 }
 
-void bv_gc2d_fillentry(void)
+void gcbv_assign(void)
 {
-	ops.bv_map = bv_gc2d_map;
-	ops.bv_unmap = bv_gc2d_unmap;
-	ops.bv_blt = bv_gc2d_blt;
+	ops.bv_map = gcbv_map;
+	ops.bv_unmap = gcbv_unmap;
+	ops.bv_blt = gcbv_blt;
 }
 
-void bv_gc2d_getentry(struct bventry *entry)
+void gcbv_init(struct bventry *entry)
 {
 	*entry = ops;
 }
-EXPORT_SYMBOL(bv_gc2d_getentry);
+EXPORT_SYMBOL(gcbv_init);

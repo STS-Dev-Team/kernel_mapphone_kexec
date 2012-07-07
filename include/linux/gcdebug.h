@@ -1,5 +1,5 @@
 /*
- * gccore.h
+ * gcdebug.h
  *
  * Copyright (C) 2010-2011 Vivante Corporation.
  *
@@ -12,17 +12,15 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef GCCORE_H
-#define GCCORE_H
+#ifndef GCDEBUG_H
+#define GCDEBUG_H
 
-#include <linux/sched.h>
-#include "gcioctl.h"
+void gc_debug_init(void);
+void gc_debug_shutdown(void);
 
-/* Command buffer submission. */
-void gc_commit(struct gccommit *gccommit, bool fromuser);
+void gc_debug_poweroff_cache(void);
+void gc_debug_cache_gpu_status_from_irq(unsigned int acknowledge);
 
-/* Surface management. */
-void gc_map(struct gcmap *gcmap, bool fromuser);
-void gc_unmap(struct gcmap *gcmap, bool fromuser);
+void gc_debug_blt(int srccount, int dstWidth, int dstHeight);
 
 #endif

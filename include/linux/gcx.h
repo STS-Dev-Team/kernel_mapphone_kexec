@@ -1,5 +1,5 @@
 /*
- * gccore.h
+ * gcx.h
  *
  * Copyright (C) 2010-2011 Vivante Corporation.
  *
@@ -12,21 +12,12 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef GCCORE_H
-#define GCCORE_H
+#ifndef GCX_H
+#define GCX_H
 
-#if 1
-#	define DBGPRINT printk
-#else
-#	define DBGPRINT(...)
-#endif
+#include "gcerror.h"
+#include "gcreg.h"
+#include "gcdbglog.h"
+#include "gcdebug.h"
 
-#define ENABLE_POLLING 1
-
-#define BLT _IOW('x', 100, u32)
-#define MAP _IOWR('x', 101, u32)
-#define UMAP _IOW('x', 102, u32)
-
-extern u32 *cmdbuf_start_logical;
-extern u32 cmdbuf_start_physical;
 #endif

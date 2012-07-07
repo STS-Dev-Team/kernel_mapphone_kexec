@@ -1,5 +1,5 @@
 /*
- * gccore.h
+ * gc2d.h
  *
  * Copyright (C) 2010-2011 Vivante Corporation.
  *
@@ -12,17 +12,15 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef GCCORE_H
-#define GCCORE_H
+#ifndef GC2D_H
+#define GC2D_H
 
-#include <linux/sched.h>
-#include "gcioctl.h"
+#include <linux/bltsville.h>
+#include <linux/bvinternal.h>
+#include <linux/ocd.h>
 
-/* Command buffer submission. */
-void gc_commit(struct gccommit *gccommit, bool fromuser);
-
-/* Surface management. */
-void gc_map(struct gcmap *gcmap, bool fromuser);
-void gc_unmap(struct gcmap *gcmap, bool fromuser);
+enum bverror gcbv_map(struct bvbuffdesc *buffdesc);
+enum bverror gcbv_unmap(struct bvbuffdesc *buffdesc);
+enum bverror gcbv_blt(struct bvbltparams *bltparams);
 
 #endif

@@ -1,7 +1,7 @@
 /*
- * gccore.h
+ * gcbv-cache.h
  *
- * Copyright (C) 2010-2011 Vivante Corporation.
+ * Copyright (C) 2012 Texas Instruments Corporation.
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -12,17 +12,10 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef GCCORE_H
-#define GCCORE_H
+#ifndef GCBV_CACHE_H_
+#define GCBV_CACHE_H_
 
-#include <linux/sched.h>
-#include "gcioctl.h"
+enum bverror gcbvcacheop(int count, struct c2dmrgn rgn[],
+		enum bvcacheop cacheop);
 
-/* Command buffer submission. */
-void gc_commit(struct gccommit *gccommit, bool fromuser);
-
-/* Surface management. */
-void gc_map(struct gcmap *gcmap, bool fromuser);
-void gc_unmap(struct gcmap *gcmap, bool fromuser);
-
-#endif
+#endif /* GCBV_CACHE_H_ */

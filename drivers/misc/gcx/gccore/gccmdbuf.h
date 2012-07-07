@@ -18,16 +18,12 @@
 #include <linux/gccore.h>
 #include "gcmmu.h"
 
-extern wait_queue_head_t gc_event;
-extern int done;
-
+struct gccorecontext;
 enum gcerror cmdbuf_init(void);
-enum gcerror cmdbuf_map(struct mmu2dcontext *ctxt);
+enum gcerror cmdbuf_map(struct gccorecontext *gccorecontext,
+			struct gcmmucontext *ctxt);
 enum gcerror cmdbuf_alloc(u32 size, void **logical, u32 *physical);
 int cmdbuf_flush(void *logical);
-void cmdbuf_dump(void);
-
-void gpu_id(void);
-void gpu_status(char *function, int line, u32 acknowledge);
+void cmdbuf_physical(bool forcephysical);
 
 #endif

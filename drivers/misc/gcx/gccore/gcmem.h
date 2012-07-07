@@ -1,5 +1,5 @@
 /*
- * gcmain.h
+ * gcmem.h
  *
  * Copyright (C) 2010-2011 Vivante Corporation.
  *
@@ -12,37 +12,25 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef GCMAIN_H
-#define GCMAIN_H
-
-#include <linux/gccore.h>
-
-/*
- * Register access.
- */
-
-unsigned int gc_read_reg(unsigned int address);
-void gc_write_reg(unsigned int address, unsigned int data);
-
-/*
- * Paged memory allocator.
- */
+#ifndef GCMEM_H
+#define GCMEM_H
 
 struct gcpage {
 	unsigned int order;
-	unsigned int size;
 	struct page *pages;
+
+	unsigned int size;
 	unsigned int physical;
 	unsigned int *logical;
 };
 
-enum gcerror gc_alloc_pages(struct gcpage *p, unsigned int size);
-void gc_free_pages(struct gcpage *p);
-void gc_flush_pages(struct gcpage *p);
+enum gcerror gc_alloc_noncached(struct gcpage *p, unsigned int size);
+void gc_free_noncached(struct gcpage *p);
 
-#if ENABLE_POLLING
-void gc_wait_interrupt(void);
-u32 gc_get_interrupt_data(void);
-#endif
+enum gcerror gc_alloc_cached(struct gcpage *p, unsigned int size);
+void gc_free_cached(struct gcpage *p);
+void gc_flush_cached(struct gcpage *p);
+void gc_flush_region(unsigned int physical, void *logical,
+			unsigned int offset, unsigned int size);
 
 #endif

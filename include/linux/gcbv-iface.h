@@ -1,5 +1,5 @@
 /*
- * gccore.h
+ * gcbv-iface.h
  *
  * Copyright (C) 2010-2011 Vivante Corporation.
  *
@@ -12,17 +12,11 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef GCCORE_H
-#define GCCORE_H
+#ifndef GCBV_IFACE_H
+#define GCBV_IFACE_H
 
-#include <linux/sched.h>
-#include "gcioctl.h"
+#include <linux/bltsville.h>
 
-/* Command buffer submission. */
-void gc_commit(struct gccommit *gccommit, bool fromuser);
-
-/* Surface management. */
-void gc_map(struct gcmap *gcmap, bool fromuser);
-void gc_unmap(struct gcmap *gcmap, bool fromuser);
+void gcbv_init(struct bventry *entry);
 
 #endif
