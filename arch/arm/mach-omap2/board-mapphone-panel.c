@@ -1139,8 +1139,7 @@ static int __init mapphone_dt_panel_init(void)
 		} else if (mapphone_dt_get_panel_feature() != 0) {
 			PANELERR("failed to parse panel feature info\n");
 			ret = -ENODEV;
-		} else if (mapphone_feature_hdmi &&
-				mapphone_dt_get_hdtv_info() != 0) {
+		} else if (mapphone_dt_get_hdtv_info() != 0) {
 			PANELERR("failed to parse hdtv info\n");
 			ret = -ENODEV;
 		} else {
