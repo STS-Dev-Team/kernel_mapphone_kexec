@@ -49,16 +49,19 @@
 /**
  * DSS Composition Device Driver
  *
+ * @pdev:  hook for platform device data
  * @dev:   misc device base
  * @dbgfs: debugfs hook
  */
 struct dsscomp_dev {
+	struct device *pdev;
 	struct miscdevice dev;
 	struct dentry *dbgfs;
 
 	/* cached DSS objects */
 	u32 num_ovls;
 	struct omap_overlay *ovls[MAX_OVERLAYS];
+	struct omap_writeback *wb_ovl;
 	u32 num_mgrs;
 	struct omap_overlay_manager *mgrs[MAX_MANAGERS];
 	u32 num_displays;
@@ -145,6 +148,8 @@ void dsscomp_flip_queue_length_invalidate(void);
 
 /* basic operation - if not using queues */
 int set_dss_ovl_info(struct dss2_ovl_info *oi);
+int set_dss_wb_info(struct dss2_ovl_info *oi,
+	enum omap_writeback_source src);
 int set_dss_mgr_info(struct dss2_mgr_info *mi, struct omapdss_ovl_cb *cb);
 struct omap_overlay_manager *find_dss_mgr(int display_ix);
 void swap_rb_in_ovl_info(struct dss2_ovl_info *oi);
@@ -163,6 +168,12 @@ const char *dsscomp_get_color_name(enum omap_color_mode m);
 
 void dsscomp_dbg_comps(struct seq_file *s);
 void dsscomp_dbg_gralloc(struct seq_file *s);
+
+/*
+  * External function prototypes
+  */
+int omap_dss_wb_apply(struct omap_overlay_manager *mgr,
+	struct omap_writeback *wb);
 
 #define log_state_str(s) (\
 	(s) == DSSCOMP_STATE_ACTIVE		? "ACTIVE"	: \

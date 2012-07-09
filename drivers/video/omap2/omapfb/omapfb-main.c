@@ -2040,6 +2040,19 @@ static int omapfb_create_framebuffers(struct omapfb2_device *fbdev)
 	DBG("fb_infos initialized\n");
 
 	for (i = 0; i < fbdev->num_fbs; i++) {
+#if 1
+		r = register_framebuffer(fbdev->fbs[i]);
+		if (r != 0) {
+			dev_err(fbdev->dev,
+				"registering framebuffer %d failed\n", i);
+			return r;
+		}
+	}
+
+	DBG("framebuffers registered\n");
+
+	for (i = 0; i < fbdev->num_fbs; i++) {
+#endif
 		struct fb_info *fbi = fbdev->fbs[i];
 		struct omapfb_info *ofbi = FB2OFB(fbi);
 
@@ -2433,7 +2446,7 @@ static int omapfb_probe(struct platform_device *pdev)
 		dev_err(fbdev->dev, "failed to create sysfs entries\n");
 		goto cleanup;
 	}
-
+#if 0
 	for (i = 0; i < fbdev->num_fbs; i++) {
 		r = register_framebuffer(fbdev->fbs[i]);
 		if (r != 0) {
@@ -2444,7 +2457,7 @@ static int omapfb_probe(struct platform_device *pdev)
 	}
 
 	DBG("framebuffers registered\n");
-
+#endif
 	return 0;
 
 cleanup:
