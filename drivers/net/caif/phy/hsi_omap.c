@@ -68,7 +68,7 @@ static int cfhsi_up (struct cfhsi_dev *dev)
 	if (sw_reset_on_cfhsi_up) {
 		/* HACK!!! Flush the FIFO */
 		res = hsi_ioctl(cfhsi->hsi_dev, HSI_IOCTL_SW_RESET, NULL);
-		if(res) {
+		if (res) {
 			dev_err(&cfhsi->pdev.dev,
 				"%s: Failed to reset HSI block: %d.\n",
 				__func__, res);
@@ -107,7 +107,7 @@ static int cfhsi_up (struct cfhsi_dev *dev)
 
 	/* Configure HSI TX. */
 	res = hsi_ioctl(cfhsi->hsi_dev, HSI_IOCTL_SET_TX, &tx_conf);
-	if(res) {
+	if (res) {
 		dev_err(&cfhsi->pdev.dev,
 			"%s: Failed to configure TX: %d.\n",
 			__func__, res);
@@ -117,7 +117,7 @@ static int cfhsi_up (struct cfhsi_dev *dev)
 
 	/* Configure HSI RX. */
 	res = hsi_ioctl(cfhsi->hsi_dev, HSI_IOCTL_SET_RX, &rx_conf);
-	if(res) {
+	if (res) {
 		dev_err(&cfhsi->pdev.dev,
 			"%s: Failed to configure RX: %d.\n",
 			__func__, res);
@@ -187,7 +187,7 @@ static int cfhsi_tx (u8 *ptr, int len, struct cfhsi_dev *dev)
 	cfhsi->tx_len = len/4;
 
 	/* Write on HSI device. */
-	res = hsi_write(cfhsi->hsi_dev, (u32*)ptr, cfhsi->tx_len);
+	res = hsi_write(cfhsi->hsi_dev, (u32 *)ptr, cfhsi->tx_len);
 
 	return res;
 }
@@ -207,7 +207,7 @@ static int cfhsi_rx (u8 *ptr, int len, struct cfhsi_dev *dev)
 	cfhsi->rx_len = len/4;
 
 	/* Write on HSI device. */
-	res = hsi_read(cfhsi->hsi_dev, (u32*)ptr, cfhsi->rx_len);
+	res = hsi_read(cfhsi->hsi_dev, (u32 *)ptr, cfhsi->rx_len);
 
 	return res;
 }
@@ -220,7 +220,7 @@ static int cfhsi_wake_up(struct cfhsi_dev *dev)
 	cfhsi = container_of(dev, struct cfhsi_omap, dev);
 
 	res = hsi_ioctl(cfhsi->hsi_dev, HSI_IOCTL_ACWAKE_UP, NULL);
-	if(res)
+	if (res)
 		dev_err(&cfhsi->pdev.dev, "%s: Wake up failed: %d.\n",
 			__func__, res);
 	else
@@ -236,7 +236,7 @@ static int cfhsi_wake_down(struct cfhsi_dev *dev)
 	cfhsi = container_of(dev, struct cfhsi_omap, dev);
 
 	res = hsi_ioctl(cfhsi->hsi_dev, HSI_IOCTL_ACWAKE_DOWN, NULL);
-	if(res)
+	if (res)
 		dev_err(&cfhsi->pdev.dev, "%s: Wake down failed: %d.\n",
 			__func__, res);
 	else
@@ -277,7 +277,7 @@ static int cfhsi_fifo_occupancy(struct cfhsi_dev *dev, size_t *occupancy)
 	cfhsi = container_of(dev, struct cfhsi_omap, dev);
 
 	res = hsi_ioctl(cfhsi->hsi_dev, HSI_IOCTL_GET_FIFO_OCCUPANCY, occupancy);
-	if(res)
+	if (res)
 		dev_err(&cfhsi->pdev.dev, "%s: HSI_IOCTL_GET_FIFO_OCCUPANCY failed: %d.\n",
 			__func__, res);
 
@@ -312,7 +312,7 @@ static void cfhsi_omap_read_cb(struct hsi_device *dev, unsigned int size)
 		cfhsi = list_entry(list_node, struct cfhsi_omap, list);
 		/* Find the corresponding device. */
 		if (cfhsi->hsi_dev == dev) {
-			//BUG_ON(size != cfhsi->rx_len);
+			/* BUG_ON(size != cfhsi->rx_len); */
 			BUG_ON(!cfhsi->dev.drv);
 			BUG_ON(!cfhsi->dev.drv->rx_done_cb);
 
@@ -335,7 +335,7 @@ static void cfhsi_omap_write_cb(struct hsi_device *dev, unsigned int size)
 		cfhsi = list_entry(list_node, struct cfhsi_omap, list);
 		/* Find the corresponding device. */
 		if (cfhsi->hsi_dev == dev) {
-			//BUG_ON(size != cfhsi->tx_len);
+			/* BUG_ON(size != cfhsi->tx_len); */
 			BUG_ON(!cfhsi->dev.drv);
 			BUG_ON(!cfhsi->dev.drv->tx_done_cb);
 
@@ -363,7 +363,7 @@ static void cfhsi_omap_port_event_cb(struct hsi_device *dev,
 		}
 	}
 
-	if((!cfhsi) || (cfhsi->hsi_dev != dev)) {
+	if ((!cfhsi) || (cfhsi->hsi_dev != dev)) {
 		dev_err(&dev->device, "%s (%d): No device.\n",
 			__func__, event);
 		return;
@@ -397,8 +397,6 @@ static void hsi_proto_release(struct device *dev)
 		cfhsi = list_entry(list_node, struct cfhsi_omap, list);
 		/* Find the corresponding device. */
 		if (&cfhsi->pdev.dev == dev) {
-			/* This should not happen. */
-			printk(KERN_WARNING "%s: orphan.\n", __func__);
 			/* Remove from list. */
 			list_del(list_node);
 			/* Free memory. */
@@ -463,7 +461,7 @@ static int hsi_proto_remove(struct hsi_device *dev)
 			/* Remove from list. */
 			list_del(list_node);
 			/* Our HSI device is gone, unregister CAIF HSI device. */
-			platform_device_unregister(&cfhsi->pdev);
+			platform_device_del(&cfhsi->pdev);
 			/* Free memory. */
 			kfree(cfhsi);
 			return 0;
@@ -504,7 +502,7 @@ static int __init cfhsi_omap_init(void)
 
 	/* Register protocol driver for HSI channel 0. */
 	res =  hsi_register_driver(&cfhsi_omap_driver);
-	if(res) {
+	if (res) {
 		printk(KERN_ERR "%s: Failed to register CAIF HSI OMAP driver: %d.\n.",
 			__func__, res);
 	}
@@ -522,8 +520,8 @@ static void __exit cfhsi_omap_exit(void)
 		cfhsi = list_entry(list_node, struct cfhsi_omap, list);
 		/* Remove from list. */
 		list_del(list_node);
-		/* unregister CAIF HSI device. */
-		platform_device_unregister(&cfhsi->pdev);
+		/* Our HSI device is gone, unregister CAIF HSI device. */
+		platform_device_del(&cfhsi->pdev);
 		/* Free memory. */
 		kfree(cfhsi);
 	}

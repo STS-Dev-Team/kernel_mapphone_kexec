@@ -24,6 +24,10 @@
 #include <asm/mach/map.h>
 #include <asm/pmu.h>
 
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+#include <mach/omap4-common.h>
+#endif
+
 #include <plat/tc.h>
 #include <plat/board.h>
 #include <plat/mcbsp.h>
@@ -317,6 +321,27 @@ static void omap_init_mcpdm(void)
 	char *oh_name = "mcpdm";
 	char *dev_name = "omap-mcpdm";
 
+	/*
+	 * Init McPDM pins for OMAP4 to prevent the occurrence of
+	 * noise at the output of the Audio IC
+	 */
+	if (cpu_is_omap44xx()) {
+		omap_mux_init_signal("abe_pdm_ul_data.abe_pdm_ul_data",
+			OMAP_PIN_INPUT_PULLDOWN);
+
+		omap_mux_init_signal("abe_pdm_dl_data.abe_pdm_dl_data",
+			OMAP_PIN_INPUT_PULLDOWN);
+
+		omap_mux_init_signal("abe_pdm_frame.abe_pdm_frame",
+			OMAP_PIN_INPUT_PULLUP);
+
+		omap_mux_init_signal("abe_pdm_lb_clk.abe_pdm_lb_clk",
+			OMAP_PIN_INPUT_PULLDOWN);
+
+		omap_mux_init_signal("abe_clks.abe_clks",
+			OMAP_PIN_INPUT_PULLDOWN);
+	}
+
 	oh = omap_hwmod_lookup(oh_name);
 	if (!oh) {
 		pr_err("%s: could not look up %s\n", __func__, oh_name);
@@ -411,12 +436,18 @@ static struct platform_device omap_abe_dai = {
 	.id	= -1,
 };
 
+static struct platform_device omap_abe_vxrec = {
+	.name	= "omap-abe-vxrec-dai",
+	.id	= -1,
+};
+
 static inline void omap_init_abe(void)
 {
 	platform_device_register(&codec_dmic0);
 	platform_device_register(&codec_dmic1);
 	platform_device_register(&codec_dmic2);
 	platform_device_register(&omap_abe_dai);
+	platform_device_register(&omap_abe_vxrec);
 }
 #else
 static inline void omap_init_abe(void) {}
@@ -608,33 +639,10 @@ static struct resource omap3_pmu_resource = {
 	.flags	= IORESOURCE_IRQ,
 };
 
-#ifdef CONFIG_PMU_DEP_CTI
-#define OMAP44XX_IRQ_PMU_CPU0 OMAP44XX_IRQ_CTI0
-#define OMAP44XX_IRQ_PMU_CPU1 OMAP44XX_IRQ_CTI1
-
-static struct resource omap4_pmu_resource[] = {
-	[0] = {
-		.start          = OMAP44XX_IRQ_PMU_CPU0,
-		.end            = OMAP44XX_IRQ_PMU_CPU0,
-		.flags          = IORESOURCE_IRQ,
-	},
-	[1] = {
-		.start          = OMAP44XX_IRQ_PMU_CPU1,
-		.end            = OMAP44XX_IRQ_PMU_CPU1,
-		.flags          = IORESOURCE_IRQ,
-	},
-};
-
-#endif
-
 static struct platform_device omap_pmu_device = {
 	.name		= "arm-pmu",
 	.id		= ARM_PMU_DEVICE_CPU,
-#ifdef CONFIG_PMU_DEP_CTI
-	.num_resources  = ARRAY_SIZE(omap4_pmu_resource),
-#else
 	.num_resources	= 1,
-#endif
 };
 
 static void omap_init_pmu(void)
@@ -643,10 +651,6 @@ static void omap_init_pmu(void)
 		omap_pmu_device.resource = &omap2_pmu_resource;
 	else if (cpu_is_omap34xx())
 		omap_pmu_device.resource = &omap3_pmu_resource;
-#ifdef CONFIG_PMU_DEP_CTI
-	else if (cpu_is_omap44xx())
-		omap_pmu_device.resource = omap4_pmu_resource;
-#endif
 	else
 		return;
 
@@ -850,23 +854,9 @@ void __init omap242x_init_mmc(struct omap_mmc_platform_data **mmc_data)
 /*-------------------------------------------------------------------------*/
 
 #if defined(CONFIG_HDQ_MASTER_OMAP) || defined(CONFIG_HDQ_MASTER_OMAP_MODULE)
-#if defined(CONFIG_SOC_OMAP2430) || defined(CONFIG_SOC_OMAP3430) || \
-	defined(CONFIG_ARCH_OMAP4)
+#if defined(CONFIG_SOC_OMAP2430) || defined(CONFIG_SOC_OMAP3430)
 #define OMAP_HDQ_BASE	0x480B2000
 #endif
-
-#include <plat/hdq.h>
-
-#define MAX_OMAP_HDQ_HWMOD_NAME_LEN		16
-static const char name[] = "omap_hdq";
-
-struct omap_device_pm_latency omap_hdq_latency[] = {
-	[0] = {
-		.deactivate_func = omap_device_idle_hwmods,
-		.activate_func   = omap_device_enable_hwmods,
-		.flags		 = OMAP_DEVICE_LATENCY_AUTO_ADJUST,
-	},
-};
 static struct resource omap_hdq_resources[] = {
 	{
 		.start		= OMAP_HDQ_BASE,
@@ -878,7 +868,7 @@ static struct resource omap_hdq_resources[] = {
 		.flags		= IORESOURCE_IRQ,
 	},
 };
-struct platform_device omap_hdq_device = {
+static struct platform_device omap_hdq_dev = {
 	.name = "omap_hdq",
 	.id = 0,
 	.dev = {
@@ -887,38 +877,12 @@ struct platform_device omap_hdq_device = {
 	.num_resources	= ARRAY_SIZE(omap_hdq_resources),
 	.resource	= omap_hdq_resources,
 };
-void omap_hdq1w_init(struct omap2_hdq_platform_config *pdata)
+static inline void omap_hdq_init(void)
 {
-	int l;
-	struct omap_hwmod *oh;
-	struct omap_device *od;
-	struct omap_hdq_platform_data omap_hdq_pdata;
-	char oh_name[MAX_OMAP_HDQ_HWMOD_NAME_LEN];
-
-	l = snprintf(oh_name, MAX_OMAP_HDQ_HWMOD_NAME_LEN,
-		     "hdq1w");
-	WARN(l >= MAX_OMAP_HDQ_HWMOD_NAME_LEN,
-	     "String buffer overflow in HDQ device setup\n");
-	oh = omap_hwmod_lookup(oh_name);
-	if (!oh) {
-		pr_err("Could not look up %s\n", oh_name);
-		return;
-	}
-
-	omap_hdq_pdata.mode = pdata->mode;
-	omap_hdq_pdata.id = pdata->id;
-	omap_hdq_pdata.dev_attr = oh->dev_attr;
-	omap_hdq_pdata.device_enable = omap_device_enable;
-	omap_hdq_pdata.device_idle = omap_device_idle;
-	omap_hdq_pdata.device_shutdown = omap_device_shutdown;
-
-	od = omap_device_build(name, 0, oh, &omap_hdq_pdata,
-			       sizeof(struct omap_hdq_platform_data),
-			       omap_hdq_latency,
-			       ARRAY_SIZE(omap_hdq_latency), 0);
-	WARN(IS_ERR(od), "Could not build omap_device for %s %s\n",
-	     name, oh_name);
+	(void) platform_device_register(&omap_hdq_dev);
 }
+#else
+static inline void omap_hdq_init(void) {}
 #endif
 
 /*---------------------------------------------------------------------------*/
@@ -956,6 +920,24 @@ static struct omap_device_pm_latency omap_gpu_latency[] = {
 	},
 };
 
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+int omap_device_scale_gpu(struct device *req_dev, struct device *target_dev,
+			unsigned long rate)
+{
+	unsigned long freq = 0;
+
+	/* find lowest frequency */
+	opp_find_freq_ceil(target_dev, &freq);
+
+	if (rate > freq)
+		omap4_dpll_cascading_blocker_hold(target_dev);
+	else
+		omap4_dpll_cascading_blocker_release(target_dev);
+
+	return omap_device_scale(req_dev, target_dev, rate);
+}
+#endif
+
 static void omap_init_gpu(void)
 {
 	struct omap_hwmod *oh;
@@ -984,8 +966,11 @@ static void omap_init_gpu(void)
 		pr_err("omap_init_gpu: Platform data memory allocation failed\n");
 		return;
 	}
-
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+	pdata->device_scale = omap_device_scale_gpu;
+#else
 	pdata->device_scale = omap_device_scale;
+#endif
 	pdata->device_enable = omap_device_enable;
 	pdata->device_idle = omap_device_idle;
 	pdata->device_shutdown = omap_device_shutdown;
@@ -1023,6 +1008,7 @@ static int __init omap2_init_devices(void)
 	omap_init_mcasp();
 	omap_init_mcspi();
 	omap_init_pmu();
+	omap_hdq_init();
 	omap_init_sti();
 	omap_init_sham();
 	omap_init_aes();

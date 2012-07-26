@@ -127,10 +127,11 @@ struct l2cap_conninfo {
 #define L2CAP_FC_L2CAP		0x02
 #define L2CAP_FC_A2MP		0x08
 
-/* L2CAP Control Field */
+/* L2CAP Control Field bit masks */
 #define L2CAP_CTRL_SAR               0xC000
 #define L2CAP_CTRL_REQSEQ            0x3F00
 #define L2CAP_CTRL_TXSEQ             0x007E
+#define L2CAP_CTRL_RETRANS           0x0080
 #define L2CAP_CTRL_FINAL             0x0080
 #define L2CAP_CTRL_POLL              0x0010
 #define L2CAP_CTRL_SUPERVISE         0x000C

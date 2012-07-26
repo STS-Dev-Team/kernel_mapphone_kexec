@@ -94,6 +94,8 @@ static struct {
 	void __iomem    *base;
 
 	int		ctx_loss_cnt;
+	struct mutex	runtime_lock;
+	int		runtime_count;
 
 	int irq;
 	struct clk *dss_clk;
@@ -1192,6 +1194,32 @@ void dispc_set_channel_out(enum omap_plane plane,
 	dispc_write_reg(DISPC_OVL_ATTRIBUTES(plane), val);
 end:
 	dispc_runtime_put();
+}
+
+void dispc_set_wb_channel_out(enum omap_plane plane)
+{
+	int shift;
+	u32 val;
+
+	switch (plane) {
+	case OMAP_DSS_GFX:
+		shift = 8;
+		break;
+	case OMAP_DSS_VIDEO1:
+	case OMAP_DSS_VIDEO2:
+	case OMAP_DSS_VIDEO3:
+		shift = 16;
+		break;
+	default:
+		BUG();
+		return;
+	}
+
+	val = dispc_read_reg(DISPC_OVL_ATTRIBUTES(plane));
+	val = FLD_MOD(val, 0, shift, shift);
+	val = FLD_MOD(val, 3, 31, 30);
+
+	dispc_write_reg(DISPC_OVL_ATTRIBUTES(plane), val);
 }
 
 void dispc_set_burst_size(enum omap_plane plane,
@@ -2296,7 +2324,8 @@ int dispc_setup_plane(enum omap_plane plane,
 		enum omap_dss_rotation_type rotation_type,
 		u8 rotation, bool mirror,
 		u8 global_alpha, u8 pre_mult_alpha,
-		enum omap_channel channel, u32 puv_addr)
+		enum omap_channel channel, u32 puv_addr,
+		bool source_of_wb)
 {
 	const int maxdownscale = cpu_is_omap24xx() ? 2 : 4;
 	bool fieldmode = 0;
@@ -2310,6 +2339,8 @@ int dispc_setup_plane(enum omap_plane plane,
 		(OMAP_DSS_COLOR_YUV2 | OMAP_DSS_COLOR_UYVY)) ? 2 : 1;
 	unsigned long tiler_width, tiler_height;
 	u32 fifo_high, fifo_low;
+	unsigned long flags;
+	u32 udf_mask;
 
 	DSSDBG("dispc_setup_plane %d, pa %x, sw %d, %d,%d, %d/%dx%d/%d -> "
 	       "%dx%d, ilace %d, cmode %x, rot %d, mir %d chan %d %dtap\n",
@@ -2321,6 +2352,49 @@ int dispc_setup_plane(enum omap_plane plane,
 
 	if (paddr == 0)
 		return -EINVAL;
+
+	/* make sure UDF is disabled for ovls that are source for WB - Errata */
+	switch (plane) {
+	case OMAP_DSS_GFX:
+		udf_mask = DISPC_IRQ_GFX_FIFO_UNDERFLOW;
+		break;
+	case OMAP_DSS_VIDEO1:
+		udf_mask = DISPC_IRQ_VID1_FIFO_UNDERFLOW;
+		break;
+	case OMAP_DSS_VIDEO2:
+		udf_mask = DISPC_IRQ_VID2_FIFO_UNDERFLOW;
+		break;
+	case OMAP_DSS_VIDEO3:
+		udf_mask = DISPC_IRQ_VID3_FIFO_UNDERFLOW;
+		break;
+	default:
+		udf_mask = 0;
+	}
+
+	if (source_of_wb) {
+		/* if the ovl UDF is enabled, disable it */
+		if (dispc.irq_error_mask & udf_mask) {
+			DSSDBG("%s: disable irq irq_error_mask:0x%x "
+				"mask:0x%x\n", __func__, dispc.irq_error_mask,
+								udf_mask);
+			spin_lock_irqsave(&dispc.irq_lock, flags);
+			dispc.irq_error_mask &= ~udf_mask;
+			_omap_dispc_set_irqs();
+			spin_unlock_irqrestore(&dispc.irq_lock, flags);
+		}
+	} else {
+		/* enable UDF if irq_error_mask needs it and its currently
+		 * disabled */
+		if (!(dispc.irq_error_mask & udf_mask)) {
+			DSSDBG("%s: enable irq irq_error_mask:0x%x "
+				"mask:0x%x\n", __func__, dispc.irq_error_mask,
+								udf_mask);
+			spin_lock_irqsave(&dispc.irq_lock, flags);
+			dispc.irq_error_mask |= udf_mask;
+			_omap_dispc_set_irqs();
+			spin_unlock_irqrestore(&dispc.irq_lock, flags);
+		}
+	}
 
 	if (ilace && height == out_height)
 		fieldmode = 1;
@@ -2364,10 +2438,10 @@ int dispc_setup_plane(enum omap_plane plane,
 	} else {
 		/* video plane */
 
-		if (out_width < width / maxdownscale)
+		if (out_width < DIV_ROUND_UP(width, maxdownscale))
 			return -EINVAL;
 
-		if (out_height < height / maxdownscale)
+		if (out_height < DIV_ROUND_UP(height, maxdownscale))
 			return -EINVAL;
 
 		if (color_mode == OMAP_DSS_COLOR_YUV2 ||
@@ -2516,6 +2590,18 @@ int dispc_enable_plane(enum omap_plane plane, bool enable)
 
 	return 0;
 }
+
+void dispc_setup_wb_source(enum omap_writeback_source source)
+{
+	/* configure wb source */
+	if (source == OMAP_WB_TV)
+		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(OMAP_DSS_WB), 2, 18, 16);
+	else if (source == OMAP_WB_LCD2)
+		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(OMAP_DSS_WB), 1, 18, 16);
+	else
+		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(OMAP_DSS_WB), source, 18, 16);
+}
+
 /* Writeback*/
 int dispc_setup_wb(struct writeback_cache_data *wb)
 {
@@ -2570,6 +2656,8 @@ int dispc_setup_wb(struct writeback_cache_data *wb)
 	/* color conversion to NV12 reduces scaling factor */
 	if (cconv == 1 && color_mode == OMAP_DSS_COLOR_NV12)
 		maxdownscale = 2;
+
+	dispc_setup_wb_source(source);
 
 	/* configure wb source */
 	if (source == OMAP_WB_TV)

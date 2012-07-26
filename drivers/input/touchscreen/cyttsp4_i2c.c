@@ -95,6 +95,8 @@ static int __devinit cyttsp4_i2c_probe(struct i2c_client *client,
 {
 	struct cyttsp4_i2c *ts;
 
+	printk(KERN_INFO "cypress probe started\n");
+
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -EIO;
 

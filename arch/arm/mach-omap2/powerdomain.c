@@ -178,8 +178,6 @@ static int _pwrdm_state_switch(struct powerdomain *pwrdm, int flag)
 		break;
 	case PWRDM_STATE_PREV:
 		prev = pwrdm_read_prev_pwrst(pwrdm);
-		if (prev < 0)
-			prev = pwrdm->state;
 		if (pwrdm->state != prev)
 			pwrdm->count.state[prev]++;
 		if (prev == PWRDM_POWER_RET)
@@ -557,6 +555,12 @@ int pwrdm_set_logic_retst(struct powerdomain *pwrdm, u8 pwrst)
 
 	if (!pwrdm)
 		return -EINVAL;
+
+	if (PWRDM_POWER_RET < pwrst) {
+		pr_err("%s: unsupported logic ret. state value pwrst=%0x",
+		 __func__, pwrst);
+		return -EINVAL;
+	}
 
 	if (!(pwrdm->pwrsts_logic_ret & (1 << pwrst)))
 		return -EINVAL;

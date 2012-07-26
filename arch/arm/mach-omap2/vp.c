@@ -71,11 +71,23 @@ void __init omap_vp_init(struct voltagedomain *voltdm)
 	sys_clk_rate = voltdm->sys_clk.rate / 1000;
 
 	timeout = (sys_clk_rate * voltdm->pmic->vp_timeout_us) / 1000;
-	vddmin = voltdm->pmic->uv_to_vsel(voltdm->pmic->vp_vddmin);
-	vddmax = voltdm->pmic->uv_to_vsel(voltdm->pmic->vp_vddmax);
 
-	waittime = (voltdm->pmic->step_size * (sys_clk_rate / 1000)) /
-		   voltdm->pmic->slew_rate;
+	if (!vp->vlimits) {
+		WARN(1, "%s: voldm_%s: No limits for VP? Using PMIC data\n",
+			   __func__, voltdm->name);
+		vddmin = voltdm->pmic->uv_to_vsel(max(voltdm->pmic->ret_volt,
+						voltdm->pmic->min_volt));
+		vddmax = voltdm->pmic->uv_to_vsel(voltdm->pmic->max_volt);
+	} else {
+		vddmin = voltdm->pmic->uv_to_vsel(max(voltdm->pmic->ret_volt,
+					max(voltdm->pmic->min_volt,
+						vp->vlimits->vddmin)));
+		vddmax = voltdm->pmic->uv_to_vsel(min(voltdm->pmic->max_volt,
+				vp->vlimits->vddmax));
+	}
+
+	waittime = DIV_ROUND_UP(voltdm->pmic->step_size * sys_clk_rate,
+				1000 * voltdm->pmic->slew_rate);
 	vstepmin = voltdm->pmic->vp_vstepmin;
 	vstepmax = voltdm->pmic->vp_vstepmax;
 
@@ -136,15 +148,11 @@ void omap_vp_clear_transdone(struct voltagedomain *voltdm)
 }
 
 int omap_vp_update_errorgain(struct voltagedomain *voltdm,
-			     unsigned long target_volt)
+			     struct omap_volt_data *volt_data)
 {
-	struct omap_volt_data *volt_data;
-
-	/* Get volt_data corresponding to target_volt */
-	volt_data = omap_voltage_get_voltdata(voltdm, target_volt);
-	if (IS_ERR(volt_data)) {
-		pr_err("%s: vdm %s no voltage data for %ld\n", __func__,
-			voltdm->name, target_volt);
+	if (IS_ERR_OR_NULL(volt_data)) {
+		pr_err("%s: vdm %s bad voltage data %p\n", __func__,
+			voltdm->name, volt_data);
 		return -EINVAL;
 	}
 
@@ -203,7 +211,8 @@ int omap_vp_forceupdate_scale(struct voltagedomain *voltdm,
 			"%s:vdd_%s idletimdout forceupdate(v=%ld)\n",
 			__func__, voltdm->name, target_volt);
 
-	ret = omap_vc_pre_scale(voltdm, target_volt, &target_vsel, &current_vsel);
+	ret = omap_vc_pre_scale(voltdm, target_volt, target_v,
+				&target_vsel, &current_vsel);
 	if (ret)
 		return ret;
 
@@ -252,7 +261,8 @@ int omap_vp_forceupdate_scale(struct voltagedomain *voltdm,
 	omap_test_timeout(vp->common->ops->check_txdone(vp->id),
 			  VP_TRANXDONE_TIMEOUT, timeout);
 	if (timeout >= VP_TRANXDONE_TIMEOUT)
-		pr_err_ratelimited("%s: vdd_%s TRANXDONE timeout exceeded. "
+		_vp_controlled_err(vp, voltdm,
+			"%s: vdd_%s TRANXDONE timeout exceeded. "
 			"TRANXDONE never got set after the voltage update. "
 			"target volt=%ld, target vsel=0x%02x, "
 			"current_vsel=0x%02x\n",
@@ -301,7 +311,7 @@ int omap_vp_forceupdate_scale(struct voltagedomain *voltdm,
  */
 unsigned long omap_vp_get_curr_volt(struct voltagedomain *voltdm)
 {
-	struct omap_vp_instance *vp = voltdm->vp;
+	struct omap_vp_instance *vp;
 	u8 curr_vsel;
 
 	if (!voltdm || IS_ERR(voltdm)) {
@@ -314,6 +324,8 @@ unsigned long omap_vp_get_curr_volt(struct voltagedomain *voltdm)
 			__func__, voltdm->name);
 		return 0;
 	}
+
+	vp = voltdm->vp;
 
 	curr_vsel = (voltdm->read(vp->voltage) & vp->common->vpvoltage_mask)
 		>> __ffs(vp->common->vpvoltage_mask);

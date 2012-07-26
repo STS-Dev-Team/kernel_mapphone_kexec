@@ -15,7 +15,7 @@
 #ifndef GCCORE_H
 #define GCCORE_H
 
-#include <linux/sched.h>
+#include "sched.h"
 #include "gcioctl.h"
 
 /* Command buffer submission. */
@@ -24,5 +24,8 @@ void gc_commit(struct gccommit *gccommit, bool fromuser);
 /* Surface management. */
 void gc_map(struct gcmap *gcmap, bool fromuser);
 void gc_unmap(struct gcmap *gcmap, bool fromuser);
+
+/* Process cleanup. */
+void gc_release(void);
 
 #endif

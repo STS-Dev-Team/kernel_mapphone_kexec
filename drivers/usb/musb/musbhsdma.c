@@ -166,6 +166,7 @@ static int dma_channel_program(struct dma_channel *channel,
 		musb_channel->epnum,
 		musb_channel->transmit ? "Tx" : "Rx",
 		packet_sz, dma_addr, len, mode);
+
 	BUG_ON(channel->status == MUSB_DMA_STATUS_UNKNOWN ||
 		channel->status == MUSB_DMA_STATUS_BUSY);
 
@@ -371,8 +372,12 @@ done:
 
 void dma_controller_destroy(struct dma_controller *c)
 {
-	struct musb_dma_controller *controller = container_of(c,
-			struct musb_dma_controller, controller);
+	struct musb_dma_controller *controller;
+
+	if (!c)
+		return;
+
+	controller = container_of(c, struct musb_dma_controller, controller);
 
 	if (!controller)
 		return;

@@ -4,6 +4,7 @@
 #include <linux/vmalloc.h>
 #include <mach/tiler.h>
 #include <video/dsscomp.h>
+#include <plat/android-display.h>
 #include <plat/dsscomp.h>
 #include "dsscomp.h"
 
@@ -11,8 +12,31 @@
 #include <linux/earlysuspend.h>
 #endif
 static bool blanked;
+static u32 dev_display_mask;
 
-#define NUM_TILER1D_SLOTS 2
+#include <linux/ion.h>
+#include <plat/dma.h>
+
+extern struct ion_device *omap_ion_device;
+struct workqueue_struct *clone_wq;
+
+struct dsscomp_dma_config {
+	u32 src_buf_addr;
+	u32 dst_buf_addr;
+	u32 width;
+	u32 height;
+	u32 stride;
+};
+
+struct dsscomp_clone_work {
+	struct work_struct work;
+	struct dsscomp_dma_config dma_cfg;
+	dsscomp_t comp;
+};
+
+wait_queue_head_t transfer_waitq;
+wait_queue_head_t dma_waitq;
+static bool dma_transfer_done;
 
 static struct tiler1d_slot {
 	struct list_head q;
@@ -20,7 +44,7 @@ static struct tiler1d_slot {
 	u32 phys;
 	u32 size;
 	u32 *page_map;
-} slots[NUM_TILER1D_SLOTS];
+} slots[NUM_ANDROID_TILER1D_SLOTS];
 static struct list_head free_slots;
 static struct dsscomp_dev *cdev;
 static DEFINE_MUTEX(mtx);
@@ -44,42 +68,7 @@ static struct kmem_cache *gsync_cachep;
 /* queued gralloc compositions */
 static LIST_HEAD(flip_queue);
 
-int gralloc_flip_queue_updated;
-
 static u32 ovl_use_mask[MAX_MANAGERS];
-
-static unsigned int tiler1d_slot_size(struct dsscomp_dev *cdev)
-{
-	struct dsscomp_platform_data *pdata;
-	pdata = (struct dsscomp_platform_data *)cdev->pdev->platform_data;
-	return pdata->tiler1d_slotsz;
-}
-
-unsigned long dsscomp_flip_queue_length(void)
-{
-	struct dsscomp_gralloc_t *gsync, *gsync_;
-	unsigned long length = ~0;
-	mutex_lock(&mtx);
-	/* Wait until something has been added to the flip queue since
-	 * the last call to dsscomp_flip_queue_length_invalidate before
-	 * returning the length of the flip queue
-	 */
-	if (gralloc_flip_queue_updated) {
-		length = 0;
-		list_for_each_entry_safe(gsync, gsync_, &flip_queue, q) {
-			length++;
-		}
-	}
-	mutex_unlock(&mtx);
-	return length;
-}
-
-void dsscomp_flip_queue_length_invalidate(void)
-{
-	mutex_lock(&mtx);
-	gralloc_flip_queue_updated = 0;
-	mutex_unlock(&mtx);
-}
 
 static void unpin_tiler_blocks(struct list_head *slots)
 {
@@ -125,10 +114,8 @@ static void dsscomp_gralloc_cb(void *data, int status)
 		}
 		if (gsync->refs.counter && gsync->cb_fn)
 			break;
-		if (gsync->refs.counter == 0) {
+		if (gsync->refs.counter == 0)
 			list_move_tail(&gsync->q, &done);
-			wake_up_all(&cdev->waitq_comp_complete);
-		}
 	}
 	mutex_unlock(&mtx);
 
@@ -183,6 +170,123 @@ int dsscomp_gralloc_queue_ioctl(struct dsscomp_setup_dispc_data *d)
 	return ret;
 }
 
+static void dsscomp_gralloc_dma_cb(int channel, u16 status, void *data)
+{
+	if (!(status & OMAP_DMA_BLOCK_IRQ) && (status != 0))
+		dev_err(DEV(cdev), "DMAtransfer failed,channel %d status %u\n",
+						channel, status);
+	dma_transfer_done = 1;
+	wake_up_interruptible(&dma_waitq);
+}
+
+static int dsscomp_gralloc_transfer_dmabuf(struct dsscomp_dma_config dma_cfg)
+{
+	int err;
+
+	/* DMA parameters */
+	int channel, device_id, sync_mode, data_type, elem_in_frame, frame_num;
+	int src_ei, src_fi, src_addr_mode, dst_ei, dst_fi, dst_addr_mode;
+	int src_burst_mode, dst_burst_mode;
+
+	dma_transfer_done = 0;
+	device_id = OMAP_DMA_NO_DEVICE;
+	sync_mode = OMAP_DMA_SYNC_ELEMENT;
+	data_type = OMAP_DMA_DATA_TYPE_S32;
+	elem_in_frame = dma_cfg.width;
+	frame_num = dma_cfg.height; /* Destination buffer is Tiler2D */
+
+	err = omap_request_dma(device_id, "dsscomp_uiclone_dma",
+			dsscomp_gralloc_dma_cb, NULL, &channel);
+	if (err) {
+		dev_err(DEV(cdev), "Unable to get an available DMA channel");
+		goto transfer_done;
+	}
+
+	omap_set_dma_transfer_params(channel, data_type, elem_in_frame,
+				frame_num, sync_mode, device_id, 0x0);
+
+	/* Source buffer parameters */
+	src_ei = src_fi = dst_ei = 1;
+	dst_fi = dma_cfg.stride - dma_cfg.width*4 + 1;
+
+	src_addr_mode = OMAP_DMA_AMODE_POST_INC;
+	dst_addr_mode = OMAP_DMA_AMODE_DOUBLE_IDX;
+	src_burst_mode = dst_burst_mode = OMAP_DMA_DATA_BURST_16;
+
+	omap_set_dma_src_params(channel, 0, src_addr_mode,
+			dma_cfg.src_buf_addr, src_ei, src_fi);
+
+	omap_set_dma_src_data_pack(channel, 1);
+	omap_set_dma_src_burst_mode(channel, src_burst_mode);
+
+	omap_set_dma_dest_params(channel, 0, dst_addr_mode,
+				dma_cfg.dst_buf_addr, dst_ei, dst_fi);
+	omap_set_dma_dest_data_pack(channel, 1);
+	omap_set_dma_dest_burst_mode(channel, dst_burst_mode);
+
+	/* Transfer as soon as possible, high priority */
+	omap_dma_set_prio_lch(channel, DMA_CH_PRIO_HIGH, DMA_CH_PRIO_HIGH);
+	omap_dma_set_global_params(DMA_DEFAULT_ARB_RATE, 0xFF, 0);
+
+	omap_start_dma(channel);
+
+	/* Wait until the callback changes the status of the transfer */
+	wait_event_interruptible_timeout(dma_waitq,
+				dma_transfer_done, msecs_to_jiffies(30));
+
+	omap_stop_dma(channel);
+	omap_free_dma(channel);
+transfer_done:
+	return err;
+}
+
+static void dsscomp_gralloc_do_clone(struct work_struct *work)
+{
+#ifdef CONFIG_DEBUG_FS
+	u32 ms1, ms2;
+#endif
+	struct dsscomp_clone_work *wk = container_of(work, typeof(*wk), work);
+
+	BUG_ON(wk->comp->state != DSSCOMP_STATE_ACTIVE);
+#ifdef CONFIG_DEBUG_FS
+	ms1 = ktime_to_ms(ktime_get());
+#endif
+	dsscomp_gralloc_transfer_dmabuf(wk->dma_cfg);
+#ifdef CONFIG_DEBUG_FS
+	ms2 = ktime_to_ms(ktime_get());
+	dev_info(DEV(cdev), "DMA latency(msec) = %lld\n", ms2-ms1);
+#endif
+
+	wk->comp->state = DSSCOMP_STATE_APPLYING;
+	if (dsscomp_apply(wk->comp))
+		dsscomp_mgr_callback(wk->comp, -1, DSS_COMPLETION_ECLIPSED_SET);
+	kfree(wk);
+}
+
+static bool dsscomp_is_any_device_active()
+{
+	struct omap_dss_device *dssdev;
+	u32 display_ix;
+	for (display_ix = 0 ; display_ix < cdev->num_displays ; display_ix++) {
+		dssdev = cdev->displays[display_ix];
+		if (dssdev && dssdev->state == OMAP_DSS_DISPLAY_ACTIVE) {
+			dev_display_mask |= 1 << display_ix;
+			return true;
+		}
+	}
+
+	/* Blank all the mangers which were active before to
+		avoid lock ups of gralloc queue */
+	for (display_ix = 0 ; display_ix < cdev->num_displays ; display_ix++) {
+		dssdev = cdev->displays[display_ix];
+		if (dev_display_mask & 1 << display_ix) {
+			dev_display_mask &= ~(1 << display_ix);
+			dssdev->manager->blank(dssdev->manager, false);
+		}
+	}
+	return false;
+}
+
 int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 			struct tiler_pa_info **pas,
 			bool early_callback,
@@ -200,12 +304,16 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 	struct tiler1d_slot *slot = NULL;
 	u32 slot_used = 0;
 #ifdef CONFIG_DEBUG_FS
-	u32 ms = dsscomp_debug_log_timestamp();
+	u32 ms = ktime_to_ms(ktime_get());
 #endif
 	u32 channels[ARRAY_SIZE(d->mgrs)], ch;
 	int skip;
 	struct dsscomp_gralloc_t *gsync;
 	struct dss2_rect_t win = { .w = 0 };
+
+	ion_phys_addr_t phys = 0;
+	size_t tiler2d_size;
+	struct tiler_view_t view;
 
 	/* reserve tiler areas if not already done so */
 	dsscomp_gralloc_init(cdev);
@@ -234,8 +342,6 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 	gsync->early_callback = early_callback;
 	INIT_LIST_HEAD(&gsync->slots);
 	list_add_tail(&gsync->q, &flip_queue);
-	gralloc_flip_queue_updated = 1;
-	wake_up_all(&cdev->waitq_comp_complete);
 	if (debug & DEBUG_GRALLOC_PHASES)
 		dev_info(DEV(cdev), "[%p] queuing flip\n", gsync);
 
@@ -259,7 +365,7 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 	memset(comp, 0, sizeof(comp));
 	memset(ovl_new_use_mask, 0, sizeof(ovl_new_use_mask));
 
-	if (skip)
+	if (skip || !dsscomp_is_any_device_active())
 		goto skip_comp;
 
 	d->mode = DSSCOMP_SETUP_DISPLAY;
@@ -387,6 +493,16 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 			oi->ba += fbi->fix.smem_start;
 			oi->uv += fbi_uv->fix.smem_start;
 			goto skip_map1d;
+		} else if (oi->addressing == OMAP_DSS_BUFADDR_ION) {
+			ion_phys_frm_dev(omap_ion_device,
+			(struct ion_handle *)oi->ba, &phys, &tiler2d_size);
+
+			tilview_create(&view, phys, d->ovls[0].cfg.crop.w,
+						d->ovls[0].cfg.crop.h);
+
+			oi->ba = phys;
+			oi->uv = oi->ba;
+			goto skip_map1d;
 		}
 
 		/* map non-TILER buffers to 1D */
@@ -396,21 +512,11 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 			goto skip_map1d;
 
 		if (!slot) {
-			/* If no callback function supplied, then do not wait
-			 * for empty slots.  This allows disabling of vsync
-			 */
-			int no_slot;
-			if (cb_fn) {
-				no_slot = down_timeout(&free_slots_sem,
-						       msecs_to_jiffies(100));
-				if (no_slot)
-					dev_warn(DEV(cdev),
-						 "could not obtain tiler slot");
-			} else {
-				no_slot = down_trylock(&free_slots_sem);
-			}
-			if (no_slot)
+			if (down_timeout(&free_slots_sem,
+						msecs_to_jiffies(100))) {
+				dev_warn(DEV(cdev), "could not obtain tiler slot");
 				goto skip_buffer;
+			}
 			mutex_lock(&mtx);
 			slot = list_first_entry(&free_slots, typeof(*slot), q);
 			list_move(&slot->q, &gsync->slots);
@@ -483,6 +589,32 @@ skip_map1d:
 		atomic_inc(&gsync->refs);
 		log_event(0, ms, gsync, "++refs=%d for [%p]",
 				atomic_read(&gsync->refs), (u32) comp[ch]);
+
+		if (ch == 1 && clone_wq && phys) {
+			/* start work-queue */
+			struct dsscomp_clone_work *wk = kzalloc(sizeof(*wk),
+								GFP_NOWAIT);
+			if (!wk) {
+				dev_err(DEV(cdev),
+					"dsscomp clone wk create failed.");
+				atomic_dec(&gsync->refs);
+				continue;
+			}
+			wk->dma_cfg.src_buf_addr =  d->ovls[0].ba;
+			wk->dma_cfg.dst_buf_addr =  phys;
+			wk->dma_cfg.width = d->ovls[0].cfg.crop.w;
+			wk->dma_cfg.height = d->ovls[0].cfg.crop.h;
+			wk->dma_cfg.stride = view.v_inc;
+			wk->comp = comp[ch];
+			INIT_WORK(&wk->work, dsscomp_gralloc_do_clone);
+			r = queue_work(clone_wq, &wk->work);
+			if (!r) {
+				dev_err(DEV(cdev),
+					"dsscomp wq start failed");
+				atomic_dec(&gsync->refs);
+			}
+			continue;
+		}
 
 		r = dsscomp_delayed_apply(comp[ch]);
 		if (r)
@@ -626,7 +758,7 @@ void dsscomp_gralloc_init(struct dsscomp_dev *cdev_)
 
 	if (!free_slots.next) {
 		INIT_LIST_HEAD(&free_slots);
-		for (i = 0; i < NUM_TILER1D_SLOTS; i++) {
+		for (i = 0; i < NUM_ANDROID_TILER1D_SLOTS; i++) {
 			u32 phys;
 			tiler_blk_handle slot =
 				tiler_alloc_block_area(TILFMT_PAGE,
@@ -661,6 +793,16 @@ void dsscomp_gralloc_init(struct dsscomp_dev *cdev_)
 						SLAB_HWCACHE_ALIGN, NULL);
 		if (!gsync_cachep)
 			pr_err("DSSCOMP: %s: can't create cache\n", __func__);
+	}
+
+	if (!clone_wq) {
+		clone_wq = create_singlethread_workqueue("dsscomp_clone_wq");
+		if (!clone_wq)
+			dev_err(DEV(cdev),
+				"Unable to create workqueue for FB cloning");
+
+		init_waitqueue_head(&transfer_waitq);
+		init_waitqueue_head(&dma_waitq);
 	}
 }
 

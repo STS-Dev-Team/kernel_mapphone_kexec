@@ -15,8 +15,6 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/socinfo.h>
-#include <linux/seq_file.h>
 #include <plat/cpu.h>
 
 #define OMAP_DIE_ID_0		0xfffe1800
@@ -120,21 +118,9 @@ static u8 __init omap_get_die_rev(void)
 	return die_rev;
 }
 
-#define SOCINFO_SZ             128
-
-static int omap1_socinfo_show(struct seq_file *m, void *v)
-{
-	char *socinfo = v;
-
-	seq_printf(m, "SoC\t: %s\n", socinfo);
-
-	return 0;
-}
-
 void __init omap_check_revision(void)
 {
-	int i, sz;
-	char socinfo[SOCINFO_SZ];
+	int i;
 	u16 jtag_id;
 	u8 die_rev;
 	u32 omap_id;
@@ -208,15 +194,11 @@ void __init omap_check_revision(void)
 		printk(KERN_INFO "Unknown OMAP cpu type: 0x%02x\n", cpu_type);
 	}
 
-	sz = snprintf(socinfo, SOCINFO_SZ, "OMAP%04x", omap_revision >> 16);
+	printk(KERN_INFO "OMAP%04x", omap_revision >> 16);
 	if ((omap_revision >> 8) & 0xff)
-		snprintf(socinfo + sz, SOCINFO_SZ - sz, "%x",
-						(omap_revision >> 8) & 0xff);
-	pr_info("%s revision %i handled as %02xxx id: %08x%08x\n",
-		socinfo, die_rev, omap_revision & 0xff, system_serial_low,
-		system_serial_high);
-
-	/* register function to show SoC info under /proc/socinfo */
-	register_socinfo_show(omap1_socinfo_show, kstrdup(socinfo, GFP_KERNEL));
+		printk(KERN_INFO "%x", (omap_revision >> 8) & 0xff);
+	printk(KERN_INFO " revision %i handled as %02xxx id: %08x%08x\n",
+	       die_rev, omap_revision & 0xff, system_serial_low,
+	       system_serial_high);
 }
 

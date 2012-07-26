@@ -81,8 +81,6 @@ static int omap_mux_disable_wakeup(const char *muxname)
  * NOTE: We abuse a little bit the struct port_ctx to use it also for
  * initialization.
  */
-
-
 static struct hsi_port_ctx omap_hsi_port_ctx[] = {
 	[0] = {
 	       .port_number = 1,

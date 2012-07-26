@@ -80,11 +80,6 @@ static int ohci_omap3_bus_suspend(struct usb_hcd *hcd)
 	if (dev->parent)
 		pm_runtime_put_sync(dev->parent);
 
-	/* Disable Any External Transceiver */
-	pdata = dev->platform_data;
-	if (pdata->ohci_phy_suspend)
-		pdata->ohci_phy_suspend(1);
-
 	return ret;
 }
 
@@ -92,20 +87,16 @@ static int ohci_omap3_bus_suspend(struct usb_hcd *hcd)
 static int ohci_omap3_bus_resume(struct usb_hcd *hcd)
 {
 	struct device *dev = hcd->self.controller;
-	struct ohci_hcd_omap_platform_data  *pdata;
+	struct ohci_hcd_omap_platform_data *pdata = dev->platform_data;
 
 	dev_dbg(dev, "ohci_omap3_bus_resume\n");
-
-	/* Re-enable any external transceiver */
-	pdata = dev->platform_data;
-	if (pdata->ohci_phy_suspend)
-		pdata->ohci_phy_suspend(0);
 
 	if (dev->parent)
 		pm_runtime_get_sync(dev->parent);
 
 	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 	enable_irq(hcd->irq);
+	*pdata->usbhs_update_sar = 1;
 
 	return ohci_bus_resume(hcd);
 }
@@ -196,12 +187,13 @@ static const struct hc_driver ohci_omap3_hc_driver = {
  */
 static int __devinit ohci_hcd_omap3_probe(struct platform_device *pdev)
 {
-	struct device		*dev = &pdev->dev;
-	struct usb_hcd		*hcd = NULL;
-	void __iomem		*regs = NULL;
-	struct resource		*res;
-	int			ret = -ENODEV;
-	int			irq;
+	struct device				*dev = &pdev->dev;
+	struct ohci_hcd_omap_platform_data	*pdata = dev->platform_data;
+	struct usb_hcd				*hcd = NULL;
+	void __iomem				*regs = NULL;
+	struct resource				*res;
+	int					ret = -ENODEV;
+	int					irq;
 
 	if (usb_disabled())
 		goto err_end;
@@ -219,7 +211,7 @@ static int __devinit ohci_hcd_omap3_probe(struct platform_device *pdev)
 
 	res = platform_get_resource_byname(pdev,
 				IORESOURCE_MEM, "ohci");
-	if (!res) {
+	if (!ret) {
 		dev_err(dev, "UHH OHCI get resource failed\n");
 		return -ENOMEM;
 	}
@@ -243,6 +235,7 @@ static int __devinit ohci_hcd_omap3_probe(struct platform_device *pdev)
 	hcd->regs =  regs;
 
 	pm_runtime_get_sync(dev->parent);
+	*pdata->usbhs_update_sar = 1;
 
 	ohci_hcd_init(hcd_to_ohci(hcd));
 
@@ -294,10 +287,6 @@ static int __devexit ohci_hcd_omap3_remove(struct platform_device *pdev)
 static void ohci_hcd_omap3_shutdown(struct platform_device *pdev)
 {
 	struct usb_hcd *hcd = dev_get_drvdata(&pdev->dev);
-	struct device *dev = hcd->self.controller;
-
-	if (dev->parent)
-		pm_runtime_get_sync(dev->parent);
 
 	if (hcd->driver->shutdown)
 		hcd->driver->shutdown(hcd);

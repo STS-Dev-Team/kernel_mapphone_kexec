@@ -233,7 +233,7 @@ struct hsi_platform_data {
 	int (*wakeup_disable) (int hsi_port);
 	bool (*wakeup_is_from_hsi) (int *hsi_port);
 	int (*board_suspend)(int hsi_port, bool dev_may_wakeup);
-	int (*board_resume)(int hsi_port);
+	int (*board_resume)(int hsi_port, bool dev_may_wakeup);
 	u8 num_ports;
 	struct hsi_ctrl_ctx *ctx;
 	u8 hsi_gdd_chan_count;
@@ -312,7 +312,8 @@ u8 hsi_hsr_fifo_flush_channel(struct hsi_dev *hsi_ctrl, unsigned int port,
 				unsigned int channel);
 u8 hsi_hst_fifo_flush_channel(struct hsi_dev *hsi_ctrl, unsigned int port,
 				unsigned int channel);
-
+void hsi_hsr_suspend(struct hsi_dev *hsi_ctrl);
+void hsi_hsr_resume(struct hsi_dev *hsi_ctrl);
 void hsi_set_pm_force_hsi_on(struct hsi_dev *hsi_ctrl);
 void hsi_set_pm_default(struct hsi_dev *hsi_ctrl);
 int hsi_softreset(struct hsi_dev *hsi_ctrl);

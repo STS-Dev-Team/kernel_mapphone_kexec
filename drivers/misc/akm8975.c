@@ -221,7 +221,7 @@ static int AKECS_SetMode_PowerDown(void)
 
 	/* Set powerdown mode */
 	buffer[0] = AK8975_REG_CNTL;
-	buffer[1] = AK8975_MODE_POWERDOWN;
+	buffer[1] = AK8975_MODE_POWER_DOWN;
 	/* Set data */
 	return AKI2C_TxData(buffer, 2);
 }
@@ -240,7 +240,7 @@ static int AKECS_SetMode(char mode)
 	case AK8975_MODE_FUSE_ACCESS:
 		ret = AKECS_SetMode_FUSEAccess();
 		break;
-	case AK8975_MODE_POWERDOWN:
+	case AK8975_MODE_POWER_DOWN:
 		ret = AKECS_SetMode_PowerDown();
 		/* wait at least 100us after changing mode */
 		udelay(100);

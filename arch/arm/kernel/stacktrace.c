@@ -34,14 +34,6 @@ int notrace unwind_frame(struct stackframe *frame)
 	if (fp < (low + 12) || fp + 4 >= high)
 		return -EINVAL;
 
-	/*
-	 * The above check fails if fp is between 0xffffffc-0xffffffff
-	 * beacuse (fp + 4) wrap arounds to values 0-4.
-	 * Adding a temporary fix untill we find a proper solution.
-	 */
-	if (fp > high)
-		return -EINVAL;
-
 	/* restore the registers from the stack frame */
 	frame->fp = *(unsigned long *)(fp - 12);
 	frame->sp = *(unsigned long *)(fp - 8);

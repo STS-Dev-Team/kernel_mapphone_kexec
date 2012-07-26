@@ -1934,7 +1934,6 @@ static void check_poison_obj(struct kmem_cache *cachep, void *objp)
 			       realobj, size);
 			print_objinfo(cachep, objp, 2);
 		}
-		BUG();
 	}
 }
 #endif
@@ -2300,8 +2299,8 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 	if (ralign < align) {
 		ralign = align;
 	}
-	/* disable debug if not aligning with REDZONE_ALIGN */
-	if (ralign & (__alignof__(unsigned long long) - 1))
+	/* disable debug if necessary */
+	if (ralign > __alignof__(unsigned long long))
 		flags &= ~(SLAB_RED_ZONE | SLAB_STORE_USER);
 	/*
 	 * 4) Store it.
@@ -2327,8 +2326,8 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 	 */
 	if (flags & SLAB_RED_ZONE) {
 		/* add space for red zone words */
-		cachep->obj_offset += align;
-		size += align + sizeof(unsigned long long);
+		cachep->obj_offset += sizeof(unsigned long long);
+		size += 2 * sizeof(unsigned long long);
 	}
 	if (flags & SLAB_STORE_USER) {
 		/* user store requires one word storage behind the end of
@@ -2932,7 +2931,6 @@ static inline void verify_redzone_free(struct kmem_cache *cache, void *obj)
 
 	printk(KERN_ERR "%p: redzone 1:0x%llx, redzone 2:0x%llx.\n",
 			obj, redzone1, redzone2);
-	BUG();
 }
 
 static void *cache_free_debugcheck(struct kmem_cache *cachep, void *objp,
@@ -3144,7 +3142,7 @@ static void *cache_alloc_debugcheck_after(struct kmem_cache *cachep,
 #endif
 		poison_obj(cachep, objp, POISON_INUSE);
 	}
-	if (cachep->flags & SLAB_STORE_USER) {
+	if (cachep->flags & SLAB_STORE_USER)
 		*dbg_userword(cachep, objp) = caller;
 	#ifdef CONFIG_MUDFLAP
 		*dbg_realsize(cachep, objp) = real_size;

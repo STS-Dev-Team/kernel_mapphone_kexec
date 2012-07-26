@@ -507,7 +507,6 @@ void proc_sched_set_task(struct task_struct *p)
 #endif
 }
 
-
 void show_cpu_current_stack_mem(void)
 {
 	struct rq *rq;

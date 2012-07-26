@@ -20,6 +20,7 @@
 #define KEYRESET_NAME "keyreset"
 
 struct keyreset_platform_data {
+	int (*reset_fn)(void);
 	int crash_key;  /* this key is used to separate hwreset and keyreset */
 	int *keys_up;
 	int *keys_down;

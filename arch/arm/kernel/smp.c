@@ -113,7 +113,6 @@ int __cpuinit __cpu_up(unsigned int cpu)
 	/*
 	 * Now bring the CPU into our world.
 	 */
-	preempt_disable();
 	ret = boot_secondary(cpu, idle);
 	if (ret == 0) {
 		unsigned long timeout;
@@ -151,11 +150,6 @@ int __cpuinit __cpu_up(unsigned int cpu)
 	}
 
 	pgd_free(&init_mm, pgd);
-
-	if (ret == 0)
-		set_cpu_active(cpu, true);
-
-	preempt_enable();
 
 	return ret;
 }
@@ -318,9 +312,7 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	smp_store_cpu_info(cpu);
 
 	/*
-	 * OK, now it's safe to let the boot CPU continue.  Wait for
-	 * the CPU migration code to notice that the CPU is online
-	 * before we continue.
+	 * OK, now it's safe to let the boot CPU continue.
 	 */
 	set_cpu_online(cpu, true);
 
@@ -329,13 +321,6 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	 */
 	percpu_timer_setup();
 
-	while (!cpu_active(cpu))
-		cpu_relax();
-
-	/*
-	 * cpu_active bit is set, so it's safe to enable interrupts
-	 * now.
-	 */
 	local_irq_enable();
 	local_fiq_enable();
 
@@ -460,7 +445,9 @@ static DEFINE_PER_CPU(struct clock_event_device, percpu_clockevent);
 static void ipi_timer(void)
 {
 	struct clock_event_device *evt = &__get_cpu_var(percpu_clockevent);
+	irq_enter();
 	evt->event_handler(evt);
+	irq_exit();
 }
 
 #ifdef CONFIG_LOCAL_TIMERS
@@ -471,12 +458,7 @@ asmlinkage void __exception_irq_entry do_local_timer(struct pt_regs *regs)
 
 	if (local_timer_ack()) {
 		__inc_irq_stat(cpu, local_timer_irqs);
-		if(irq_enter)
-			irq_enter();
-		if(ipi_timer)
-			ipi_timer();
-		if(irq_exit)
-			irq_exit();
+		ipi_timer();
 	}
 
 	set_irq_regs(old_regs);
@@ -638,9 +620,7 @@ asmlinkage void __exception_irq_entry do_IPI(int ipinr, struct pt_regs *regs)
 
 	switch (ipinr) {
 	case IPI_TIMER:
-		irq_enter();
 		ipi_timer();
-		irq_exit();
 		break;
 
 	case IPI_RESCHEDULE:
@@ -648,21 +628,15 @@ asmlinkage void __exception_irq_entry do_IPI(int ipinr, struct pt_regs *regs)
 		break;
 
 	case IPI_CALL_FUNC:
-		irq_enter();
 		generic_smp_call_function_interrupt();
-		irq_exit();
 		break;
 
 	case IPI_CALL_FUNC_SINGLE:
-		irq_enter();
 		generic_smp_call_function_single_interrupt();
-		irq_exit();
 		break;
 
 	case IPI_CPU_STOP:
-		irq_enter();
 		ipi_cpu_stop(cpu);
-		irq_exit();
 		break;
 
 	case IPI_CPU_BACKTRACE:

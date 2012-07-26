@@ -375,10 +375,10 @@ static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 		goto free_rpvq;
 	}
 
-	printk(KERN_ERR"vring%d: phys 0x%x, virt 0x%x\n", index, rpdev->vring[index],
-					(unsigned int) rpvq->addr);
-
 	memset(rpvq->addr, 0, RPMSG_RING_SIZE);
+
+	pr_debug("vring%d: phys 0x%x, virt 0x%x\n", index, rpdev->vring[index],
+					(unsigned int) rpvq->addr);
 
 	vq = vring_new_virtqueue(RPMSG_NUM_BUFS / 2, RPMSG_VRING_ALIGN, vdev,
 				rpvq->addr, omap_rpmsg_notify, callback, name);
@@ -450,7 +450,6 @@ static int omap_rpmsg_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 		return -EINVAL;
 
 	for (i = 0; i < nvqs; ++i) {
-	printk(KERN_ERR"2.%d:: vdev=%lu, callbacks[%d]==%lu, names[%d]==%s\n", i, vdev, i, callbacks[i], i, names[i]);
 		vqs[i] = rp_find_vq(vdev, i, callbacks[i], names[i]);
 		if (IS_ERR(vqs[i])) {
 			err = PTR_ERR(vqs[i]);
@@ -463,7 +462,6 @@ static int omap_rpmsg_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 	/* ioremap'ing normal memory, so we cast away sparse's complaints */
 	rpdev->buf_mapped = (__force void *) ioremap_nocache(rpdev->buf_addr,
 							rpdev->buf_size);
-
 	if (!rpdev->buf_mapped) {
 		pr_err("ioremap failed\n");
 		err = -ENOMEM;

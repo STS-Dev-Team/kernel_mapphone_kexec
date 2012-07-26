@@ -512,6 +512,13 @@ long st_kim_stop(void *kim_data)
 
 	INIT_COMPLETION(kim_gdata->ldisc_installed);
 
+	if (tty) {	/* can be called before ldisc is installed */
+		/* Flush any pending characters in the driver and discipline. */
+		tty_ldisc_flush(tty);
+		tty_driver_flush_buffer(tty);
+		tty->ops->flush_buffer(tty);
+	}
+
 	/* send uninstall notification to UIM */
 	pr_info("ldisc_install = 0");
 	kim_gdata->ldisc_install = 0;
@@ -522,7 +529,7 @@ long st_kim_stop(void *kim_data)
 			msecs_to_jiffies(LDISC_TIME));
 	if (!err) {		/* timeout */
 		pr_err(" timed out waiting for ldisc to be un-installed");
-		return -ETIMEDOUT;
+		err = -ETIMEDOUT;
 	}
 
 	/* By default configure BT nShutdown to LOW state */

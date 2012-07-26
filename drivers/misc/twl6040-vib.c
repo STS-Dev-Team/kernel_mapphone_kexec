@@ -250,6 +250,7 @@ void vibrator_haptic_fire(int value)
 static int vib_suspend(struct device *dev)
 {
 	hrtimer_cancel(&misc_data->timer);
+	cancel_work_sync(&misc_data->vib_work);
 	vib_set(0);
 	flush_delayed_work_sync(&misc_data->power_work);
 
@@ -310,8 +311,8 @@ static int vib_probe(struct platform_device *pdev)
 	mutex_init(&misc_data->power_mutex);
 
 	ret = twl6040_request_irq(data->twl6040, TWL6040_IRQ_VIB,
-				  twl6040_vib_irq_handler,
-				  "twl6040_irq_vib", data);
+				twl6040_vib_irq_handler, 0,
+				"twl6040_irq_vib", data);
 	if (ret) {
 		pr_err("%s: VIB IRQ request failed: %d\n", __func__, ret);
 		goto err2;

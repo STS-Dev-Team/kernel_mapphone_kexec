@@ -150,7 +150,6 @@ __do_kernel_fault(struct mm_struct *mm, unsigned long addr, unsigned int fsr,
 	/*
 	 * No handler, we'll have to terminate things with extreme prejudice.
 	 */
-	preempt_disable();
 	bust_spinlocks(1);
 	printk(KERN_ALERT
 		"Unable to handle kernel %s at virtual address %08lx\n",
@@ -290,7 +289,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
-	if (in_atomic() || !mm || irqs_disabled())
+	if (in_atomic() || !mm)
 		goto no_context;
 
 	/*
@@ -558,12 +557,6 @@ do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 
 	if (!inf->fn(addr, fsr & ~FSR_LNX_PF, regs))
 		return;
-
-	if (oops_in_progress) {
-		if (!user_mode(regs) && !fixup_exception(regs))
-			regs->ARM_pc += (thumb_mode(regs) ? 2 : 4);
-		return;
-	}
 
 	printk(KERN_ALERT "Unhandled fault: %s (0x%03x) at 0x%08lx\n",
 		inf->name, fsr, addr);

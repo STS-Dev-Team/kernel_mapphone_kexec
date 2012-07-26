@@ -208,9 +208,7 @@ int virtqueue_add_buf_gfp(struct virtqueue *_vq,
 		prev = i;
 		sg++;
 	}
-printk(KERN_ERR"7\n");
 	for (; in; i = vq->vring.desc[i].next, in--) {
-printk(KERN_ERR"7.%d::in=%d, vq->vring.desc[%d]==%lu, sg==%lu, sg_phys(sg)==%lu\n", i, in, i, vq->vring.desc[i], sg, sg_phys(sg));
 		vq->vring.desc[i].flags = VRING_DESC_F_NEXT|VRING_DESC_F_WRITE;
 		vq->vring.desc[i].addr = sg_phys(sg);
 		vq->vring.desc[i].len = sg->length;
@@ -218,22 +216,18 @@ printk(KERN_ERR"7.%d::in=%d, vq->vring.desc[%d]==%lu, sg==%lu, sg_phys(sg)==%lu\
 		sg++;
 	}
 	/* Last one doesn't continue. */
-printk(KERN_ERR"8\n");
 	vq->vring.desc[prev].flags &= ~VRING_DESC_F_NEXT;
 
 	/* Update free pointer */
-printk(KERN_ERR"9\n");
 	vq->free_head = i;
 
 add_head:
 	/* Set token. */
-printk(KERN_ERR"10\n");
 	vq->data[head] = data;
 
 	/* Put entry in available array (but don't update avail->idx until they
 	 * do sync).  FIXME: avoid modulus here? */
 	avail = (vq->vring.avail->idx + vq->num_added++) % vq->vring.num;
-printk(KERN_ERR"11\n");
 	vq->vring.avail->ring[avail] = head;
 
 	pr_debug("Added buffer head %i to %p\n", head, vq);

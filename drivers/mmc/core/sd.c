@@ -1063,6 +1063,7 @@ static void mmc_sd_detect(struct mmc_host *host)
 
 		mmc_claim_host(host);
 		mmc_detach_bus(host);
+		mmc_power_off(host);
 		mmc_release_host(host);
 	}
 }
@@ -1079,7 +1080,7 @@ static int mmc_sd_suspend(struct mmc_host *host)
 	if (!mmc_host_is_spi(host))
 		mmc_deselect_cards(host);
 	host->card->state &= ~MMC_STATE_HIGHSPEED;
-	mmc_release_host(host);
+	mmc_release_host_sync(host);
 
 	return 0;
 }
@@ -1118,7 +1119,7 @@ static int mmc_sd_resume(struct mmc_host *host)
 #else
 	err = mmc_sd_init_card(host, host->ocr, host->card);
 #endif
-	mmc_release_host(host);
+	mmc_release_host_sync(host);
 
 	return err;
 }

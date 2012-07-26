@@ -2,8 +2,20 @@
 # Makefile for the linux kernel.
 #
 
-CFLAGS_REMOVE_common.o = -pg
-CFLAGS_REMOVE_io.o = -pg
+# FIXME: For OMAP4 target - the sequence of Obj-files inclusion in
+# 	Makefile is strictly related to sequence of the Kernel xxx_initcall
+# 	functions calls. Any changes in the sequence of Obj-files inclusion
+# 	in this file should be done carefully and can cause unpredictable
+# 	system behaviour - especially it can have impact on OMAP4 PM
+# 	initialization procedure.
+#
+# Known valid sequence:
+# 	- pm.o
+# 	- sr_device.o
+# 	- smartreflex.o
+# 	- smartreflex-class3.o
+# 	- smartreflex-class1p5.o
+# 	- pm44xx.o
 
 # Common support
 obj-y := id.o io.o control.o mux.o devices.o serial.o gpmc.o timer-gp.o pm.o \
@@ -33,7 +45,6 @@ obj-$(CONFIG_LOCAL_TIMERS)		+= timer-mpu.o
 obj-$(CONFIG_HOTPLUG_CPU)		+= omap-hotplug.o
 obj-$(CONFIG_ARCH_OMAP4)		+= omap44xx-smc.o omap4-common.o \
 					   omap-wakeupgen.o
-obj-$(CONFIG_PMU_DEP_CTI)		+= pmu44xx.o
 
 plus_sec := $(call as-instr,.arch_extension sec,+sec)
 AFLAGS_omap-headsmp.o			:=-Wa,-march=armv7-a$(plus_sec)
@@ -65,6 +76,11 @@ obj-$(CONFIG_ARCH_OMAP3)		+= opp3xxx_data.o
 obj-$(CONFIG_ARCH_OMAP4)		+= opp4xxx_data.o
 endif
 
+# Smartreflex AVS initialization
+obj-$(CONFIG_OMAP_SMARTREFLEX)          += sr_device.o smartreflex.o
+obj-$(CONFIG_OMAP_SMARTREFLEX_CLASS3)	+= smartreflex-class3.o
+obj-$(CONFIG_OMAP_SMARTREFLEX_CLASS1P5)	+= smartreflex-class1p5.o
+
 # CPUFREQ driver
 obj-$(CONFIG_CPU_FREQ)			+= omap2plus-cpufreq.o
 
@@ -81,9 +97,6 @@ obj-$(CONFIG_PM_DEBUG)			+= pm-debug.o
 ifeq ($(CONFIG_PM_DEBUG),y)
 obj-$(CONFIG_ARCH_OMAP4)		+= prcm-debug.o
 endif
-obj-$(CONFIG_OMAP_SMARTREFLEX)          += sr_device.o smartreflex.o
-obj-$(CONFIG_OMAP_SMARTREFLEX_CLASS3)	+= smartreflex-class3.o
-obj-$(CONFIG_OMAP_SMARTREFLEX_CLASS1P5)	+= smartreflex-class1p5.o
 
 AFLAGS_sleep24xx.o			:=-Wa,-march=armv6
 AFLAGS_sleep34xx.o			:=-Wa,-march=armv7-a$(plus_sec)
@@ -260,16 +273,21 @@ obj-$(CONFIG_MACH_OMAP_4430SDP)		+= board-4430sdp.o \
 					   board-blaze-sensors.o \
 					   board-blaze-modem.o \
 					   board-44xx-identity.o \
+					   board-44xx-power.o \
+					   board-44xx-serial.o \
 					   hsmmc.o \
 					   omap_phy_internal.o \
 					   omap4_apps_brd_id.o
 obj-$(CONFIG_MACH_OMAP_BLAZE)		+= board-44xx-tablet.o \
 					   board-44xx-identity.o \
+					   board-44xx-power.o \
+					   board-44xx-serial.o \
 					   board-44xx-tablet-touch.o \
 					   board-44xx-tablet-sensors.o \
 					   board-44xx-tablet-panel.o \
 					   board-44xx-tablet-buttons.o \
 					   omap4_apps_brd_id.o
+obj-$(CONFIG_TOUCHSCREEN_CYPRESS_TTSP)  += board-touch-cyttsp4_core.o
 obj-$(CONFIG_MACH_OMAP4_PANDA)		+= board-omap4panda.o \
 					   hsmmc.o \
 					   board-44xx-identity.o \
@@ -347,3 +365,5 @@ obj-$(CONFIG_ARCH_OMAP4)		+= omap4-reboot-reason.o
 endif
 
 obj-$(CONFIG_OMAP_RAM_CONSOLE)		+= omap_ram_console.o
+obj-$(CONFIG_ARCH_OMAP4)		+= omap_gcxxx.o
+obj-$(CONFIG_OMAP_RFKILL_STE_MODEM)	+= omap-rfkill-ste.o

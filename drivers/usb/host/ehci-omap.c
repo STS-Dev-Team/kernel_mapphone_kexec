@@ -58,7 +58,7 @@
 #define	EHCI_INSNREG05_ULPI_REGADD_SHIFT		16
 #define	EHCI_INSNREG05_ULPI_EXTREGADD_SHIFT		8
 #define	EHCI_INSNREG05_ULPI_WRDATA_SHIFT		0
-#define	L3INIT_HSUSBHOST_CLKCTRL			0x4A009358
+//#define	L3INIT_HSUSBHOST_CLKCTRL			0x4A009358
 #define	L3INIT_HSUSBTLL_CLKCTRL				0x4A009368
 
 #define USB_INT_EN_RISE_CLR_0				0x4A06280F
@@ -374,6 +374,23 @@ error_exit:
 	return retval;
 }
 
+void omap_ehci_hw_phy_reset(const struct usb_hcd *hcd)
+{
+	struct device *dev = hcd->self.controller;
+	struct ehci_hcd_omap_platform_data  *pdata;
+
+	pdata = dev->platform_data;
+
+	if (gpio_is_valid(pdata->reset_gpio_port[0])) {
+		gpio_set_value(pdata->reset_gpio_port[0], 0);
+		mdelay(2);
+		gpio_set_value(pdata->reset_gpio_port[0], 1);
+		mdelay(2);
+	}
+
+	return;
+}
+
 static int omap4_ehci_update_device_disconnect(
 	struct usb_hcd	*hcd,
 	unsigned	port_num
@@ -506,7 +523,6 @@ static int omap4_ehci_tll_hub_control(
 
 				temp_reg = __raw_readl(tll_reg);
 				temp_reg &= ~(1 << (wIndex + 8));
-
 
 				/* stop resume signaling */
 				temp = __raw_readl(status_reg) &
@@ -922,6 +938,7 @@ static int ehci_hcd_omap_probe(struct platform_device *pdev)
 	}
 
 	pm_runtime_get_sync(dev->parent);
+	*pdata->usbhs_update_sar = 1;
 
 	/*
 	 * An undocumented "feature" in the OMAP3 EHCI controller,
@@ -1130,6 +1147,7 @@ static int ehci_omap_bus_resume(struct usb_hcd *hcd)
 
 	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 	enable_irq(hcd->irq);
+	*pdata->usbhs_update_sar = 1;
 
 	return ehci_bus_resume(hcd);
 }

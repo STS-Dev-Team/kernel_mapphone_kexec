@@ -604,6 +604,7 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 	.ops = &motsnd_bpvoice_ops,
 	.ignore_suspend = 1,
 },
+#if 0
 {
 	.name = "VoiceCall Second",
 	.stream_name = "Modem-Codec-Second",
@@ -626,6 +627,7 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 	.ops = &motsnd_incall_ops,
 	.ignore_suspend = 1,
 },
+#endif
 #ifdef MOTSND_CONFIG_ENABLE_ABE
 {
 	.name = OMAP_ABE_BE_MM_EXT0,

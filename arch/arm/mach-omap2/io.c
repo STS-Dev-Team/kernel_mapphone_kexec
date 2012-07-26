@@ -127,43 +127,43 @@ static struct map_desc omap34xx_io_desc[] __initdata = {
 		.virtual	= L3_34XX_VIRT,
 		.pfn		= __phys_to_pfn(L3_34XX_PHYS),
 		.length		= L3_34XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 	{
 		.virtual	= L4_34XX_VIRT,
 		.pfn		= __phys_to_pfn(L4_34XX_PHYS),
 		.length		= L4_34XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 	{
 		.virtual	= OMAP34XX_GPMC_VIRT,
 		.pfn		= __phys_to_pfn(OMAP34XX_GPMC_PHYS),
 		.length		= OMAP34XX_GPMC_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 	{
 		.virtual	= OMAP343X_SMS_VIRT,
 		.pfn		= __phys_to_pfn(OMAP343X_SMS_PHYS),
 		.length		= OMAP343X_SMS_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 	{
 		.virtual	= OMAP343X_SDRC_VIRT,
 		.pfn		= __phys_to_pfn(OMAP343X_SDRC_PHYS),
 		.length		= OMAP343X_SDRC_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 	{
 		.virtual	= L4_PER_34XX_VIRT,
 		.pfn		= __phys_to_pfn(L4_PER_34XX_PHYS),
 		.length		= L4_PER_34XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 	{
 		.virtual	= L4_EMU_34XX_VIRT,
 		.pfn		= __phys_to_pfn(L4_EMU_34XX_PHYS),
 		.length		= L4_EMU_34XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 #if defined(CONFIG_DEBUG_LL) &&							\
 	(defined(CONFIG_MACH_OMAP_ZOOM2) || defined(CONFIG_MACH_OMAP_ZOOM3))
@@ -171,7 +171,7 @@ static struct map_desc omap34xx_io_desc[] __initdata = {
 		.virtual	= ZOOM_UART_VIRT,
 		.pfn		= __phys_to_pfn(ZOOM_UART_BASE),
 		.length		= SZ_1M,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE
 	},
 #endif
 };
@@ -194,49 +194,49 @@ static struct map_desc omap44xx_io_desc[] __initdata = {
 		.virtual	= L3_44XX_VIRT,
 		.pfn		= __phys_to_pfn(L3_44XX_PHYS),
 		.length		= L3_44XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= L4_44XX_VIRT,
 		.pfn		= __phys_to_pfn(L4_44XX_PHYS),
 		.length		= L4_44XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= OMAP44XX_GPMC_VIRT,
 		.pfn		= __phys_to_pfn(OMAP44XX_GPMC_PHYS),
 		.length		= OMAP44XX_GPMC_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= OMAP44XX_EMIF1_VIRT,
 		.pfn		= __phys_to_pfn(OMAP44XX_EMIF1_PHYS),
 		.length		= OMAP44XX_EMIF1_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= OMAP44XX_EMIF2_VIRT,
 		.pfn		= __phys_to_pfn(OMAP44XX_EMIF2_PHYS),
 		.length		= OMAP44XX_EMIF2_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= OMAP44XX_DMM_VIRT,
 		.pfn		= __phys_to_pfn(OMAP44XX_DMM_PHYS),
 		.length		= OMAP44XX_DMM_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= L4_PER_44XX_VIRT,
 		.pfn		= __phys_to_pfn(L4_PER_44XX_PHYS),
 		.length		= L4_PER_44XX_SIZE,
-		.type		= IO_MAP_TYPE,
+		.type		= MT_DEVICE,
 	},
 	{
 		.virtual	= L4_EMU_44XX_VIRT,
 		.pfn		= __phys_to_pfn(L4_EMU_44XX_PHYS),
 		.length		= L4_EMU_44XX_SIZE,
-		.type		= IO_MAP_TYPE
+		.type		= MT_DEVICE,
 	},
 };
 #endif
@@ -375,13 +375,9 @@ void __init omap2_init_common_infrastructure(void)
 		omap3xxx_clockdomains_init();
 		omap3xxx_hwmod_init();
 	} else if (cpu_is_omap44xx()) {
-		printk("voltagedomains\n");
 		omap44xx_voltagedomains_init();
-		printk("powerdomains\n");
 		omap44xx_powerdomains_init();
-		printk("clockdomains\n");
 		omap44xx_clockdomains_init();
-		printk("hwmod init\n");
 		omap44xx_hwmod_init();
 	} else {
 		pr_err("Could not init hwmod data - unknown SoC\n");
@@ -393,7 +389,6 @@ void __init omap2_init_common_infrastructure(void)
 #else
 	postsetup_state = _HWMOD_STATE_ENABLED;
 #endif
-	printk("hwmod foreach\n");
 	omap_hwmod_for_each(_set_hwmod_postsetup_state, &postsetup_state);
 
 	/*
@@ -414,7 +409,6 @@ void __init omap2_init_common_infrastructure(void)
 				     _set_hwmod_postsetup_state,
 				     &postsetup_state);
 
-	printk("omap pm early init\n");
 	omap_pm_if_early_init();
 
 	if (cpu_is_omap2420())
@@ -424,10 +418,7 @@ void __init omap2_init_common_infrastructure(void)
 	else if (cpu_is_omap34xx())
 		omap3xxx_clk_init();
 	else if (cpu_is_omap44xx())
-	{
-		printk("clk init\n");
 		omap4xxx_clk_init();
-	}
 	else
 		pr_err("Could not init clock framework - unknown SoC\n");
 }

@@ -39,6 +39,7 @@
 #include <mach/emif.h>
 #include <mach/lpddr2-elpida.h>
 #include <mach/dmm.h>
+#include <mach/omap4_ion.h>
 
 #include <asm/mach-types.h>
 #include <asm/setup.h>
@@ -56,7 +57,7 @@
 #include <video/omapdss.h>
 #include <video/omap-panel-nokia-dsi.h>
 #include <plat/omap-pm.h>
-#include <plat/hdq.h>
+//#include <plat/hdq.h>
 #include <plat/cpu.h>
 
 #include <mach/system.h>
@@ -69,7 +70,7 @@
 #include "board-mapphone.h"
 #include "board-mapphone-sensors.h"
 #include "board-mapphone-padconf.h"
-#include "omap4_ion.h"
+#include <mach/omap4_ion.h>
 #include "mux.h"
 #include "hsmmc.h"
 #include "timer-gp.h"
@@ -1119,10 +1120,12 @@ static void __init mapphone_power_off_init(void)
 	platform_driver_register(&cpcap_charger_connected_driver);
 }
 
+#if 0
 static struct omap2_hdq_platform_config mapphone_hdq_data = {
 	.mode = OMAP_SDQ_MODE,
 	.id = W1_EEPROM_DS2502,
 };
+#endif
 
 static struct omap_musb_board_data musb_board_data = {
 	.interface_type         = MUSB_INTERFACE_ULPI,
@@ -1439,7 +1442,7 @@ static void __init mapphone_init(void)
 	mapphone_vibrator_init();
 	mapphone_sensors_init();
 	omap4_mapphone_wifi_init();
-	omap_hdq1w_init(&mapphone_hdq_data);
+//	omap_hdq1w_init(&mapphone_hdq_data);
 
 	mapphone_usbhost_init();
 	mapphone_musb_init();
@@ -1487,27 +1490,26 @@ static void __init mapphone_map_io(void)
 }
 static void __init mapphone_reserve(void)
 {
-#ifdef CONFIG_ION_OMAP_DYNAMIC
-	/* do the static reservations first */
-	memblock_remove(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
+	omap_init_ram_size();
 
-	/* ipu needs to recognize secure input buffer area as well */
-	omap_ipu_set_static_mempool(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
+#ifdef CONFIG_ION_OMAP
+	mapphone_android_display_setup(get_omap_ion_platform_data());
+	omap_ion_init();
 #else
+	mapphone_android_display_setup(NULL);
+#endif
+	omap_ram_console_init(OMAP_RAM_CONSOLE_START_DEFAULT, OMAP_RAM_CONSOLE_SIZE_DEFAULT);
+
 	/* do the static reservations first */
 	memblock_remove(PHYS_ADDR_SMC_MEM, PHYS_ADDR_SMC_SIZE);
 	memblock_remove(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE);
 	/* ipu needs to recognize secure input buffer area as well */
 	omap_ipu_set_static_mempool(PHYS_ADDR_DUCATI_MEM, PHYS_ADDR_DUCATI_SIZE + OMAP4_ION_HEAP_SECURE_INPUT_SIZE);
-#endif
 #ifdef CONFIG_OMAP_REMOTE_PROC_DSP
 	memblock_remove(PHYS_ADDR_TESLA_MEM, PHYS_ADDR_TESLA_SIZE);
 	omap_dsp_set_static_mempool(PHYS_ADDR_TESLA_MEM, PHYS_ADDR_TESLA_SIZE);
 #endif
 
-#ifdef CONFIG_ION_OMAP
-	omap_ion_init();
-#endif
 	omap_reserve();
 }
 

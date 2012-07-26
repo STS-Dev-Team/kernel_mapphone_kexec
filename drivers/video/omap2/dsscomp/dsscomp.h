@@ -67,8 +67,6 @@ struct dsscomp_dev {
 	u32 num_displays;
 	struct omap_dss_device *displays[MAX_DISPLAYS];
 	struct notifier_block state_notifiers[MAX_DISPLAYS];
-
-	wait_queue_head_t waitq_comp_complete;
 };
 
 extern int debug;
@@ -143,17 +141,22 @@ int dsscomp_wait(struct dsscomp_sync_obj *sync, enum dsscomp_wait_phase phase,
 								int timeout);
 int dsscomp_state_notifier(struct notifier_block *nb,
 						unsigned long arg, void *ptr);
-unsigned long dsscomp_flip_queue_length(void);
-void dsscomp_flip_queue_length_invalidate(void);
 
 /* basic operation - if not using queues */
 int set_dss_ovl_info(struct dss2_ovl_info *oi);
-int set_dss_wb_info(struct dss2_ovl_info *oi,
-	enum omap_writeback_source src);
-int set_dss_mgr_info(struct dss2_mgr_info *mi, struct omapdss_ovl_cb *cb);
+int set_dss_wb_info(struct dss2_ovl_info *oi);
+int set_dss_mgr_info(struct dss2_mgr_info *mi, struct omapdss_ovl_cb *cb,
+								bool m2m_mode);
 struct omap_overlay_manager *find_dss_mgr(int display_ix);
 void swap_rb_in_ovl_info(struct dss2_ovl_info *oi);
 void swap_rb_in_mgr_info(struct dss2_mgr_info *mi);
+
+static inline u32 tiler1d_slot_size(struct dsscomp_dev *cdev)
+{
+	struct dsscomp_platform_data *pdata;
+	pdata = (struct dsscomp_platform_data *)cdev->pdev->platform_data;
+	return pdata->tiler1d_slotsz;
+}
 
 /*
  * Debug functions
@@ -202,19 +205,11 @@ void dsscomp_dbg_events(struct seq_file *s);
 #endif
 
 static inline
-u32 dsscomp_debug_log_timestamp(void)
-{
-	unsigned long long t = local_clock();
-	do_div(t, 1000000);
-	return (u32) t;
-}
-
-static inline
 void __log_event(u32 ix, u32 ms, void *data, const char *fmt, u32 a1, u32 a2)
 {
 #ifdef CONFIG_DSSCOMP_DEBUG_LOG
 	if (!ms)
-		ms = dsscomp_debug_log_timestamp();
+		ms = ktime_to_ms(ktime_get());
 	dbg_events[dbg_event_ix].ms = ms;
 	dbg_events[dbg_event_ix].data = data;
 	dbg_events[dbg_event_ix].fmt = fmt;

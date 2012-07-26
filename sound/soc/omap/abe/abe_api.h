@@ -93,7 +93,8 @@
 #define TASK_ASRC_BT_DL_SLT 18
 #define TASK_ASRC_BT_DL_IDX 6
 
-
+// FIXME-HASH: Moved to abe_dbg.h
+#if 0
 struct omap_abe {
 	void __iomem *io_base[5];
 	u32 firmware_version_number;
@@ -112,6 +113,7 @@ struct omap_abe {
 
 	struct omap_abe_dbg dbg;
 };
+#endif
 
 /**
  * abe_reset_hal - reset the ABE/HAL
@@ -527,5 +529,15 @@ void abe_init_mem(void __iomem **_io_base);
  *
  */
 void abe_write_pdmdl_offset(u32 path, u32 offset_left, u32 offset_right);
+
+/**
+ * abe_write_select_pdm_output - Select the path for OPP25 route input
+ *
+ * Parameters:
+ *   path: 1 for output om headset, 2 for output on handsfree, 3 on the 2 output
+ *	 at the same time
+ *
+ */
+void abe_write_select_pdm_output(u32 path);
 
 #endif/* _ABE_API_H_ */

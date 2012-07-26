@@ -33,6 +33,7 @@
 #include <plat/omap_device.h>
 #include <mach/ctrl_module_pad_core_44xx.h>
 
+#include "control.h"
 #include "mux.h"
 
 #ifdef CONFIG_MFD_OMAP_USB_HOST
@@ -46,6 +47,7 @@
 static struct usbhs_omap_platform_data		usbhs_data;
 static struct ehci_hcd_omap_platform_data	ehci_data;
 static struct ohci_hcd_omap_platform_data	ohci_data;
+static int usbhs_update_sar;
 
 static struct omap_device_pm_latency omap_uhhtll_latency[] = {
 	  {
@@ -595,6 +597,7 @@ setup_4430ehci_io_mux(const enum usbhs_omap_port_mode *port_mode)
 {
 	struct omap_device_pad *pads;
 	int pads_cnt;
+	u32 val = 0;
 
 	switch (port_mode[0]) {
 	case OMAP_EHCI_PORT_MODE_PHY:
@@ -604,6 +607,13 @@ setup_4430ehci_io_mux(const enum usbhs_omap_port_mode *port_mode)
 	case OMAP_EHCI_PORT_MODE_TLL:
 		pads = port1_tll_pads;
 		pads_cnt = ARRAY_SIZE(port1_tll_pads);
+
+		/* Errata i687: set I/O drive strength to 1 */
+		if (cpu_is_omap443x()) {
+			val = omap4_ctrl_pad_readl(OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_SMART2IO_PADCONF_2);
+			val |= OMAP4_USBB1_DR0_DS_MASK;
+			omap4_ctrl_pad_writel(val, OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_SMART2IO_PADCONF_2);
+		}
 			break;
 	case OMAP_USBHS_PORT_MODE_UNUSED:
 	default:
@@ -617,6 +627,13 @@ setup_4430ehci_io_mux(const enum usbhs_omap_port_mode *port_mode)
 	case OMAP_EHCI_PORT_MODE_TLL:
 		pads = port2_tll_pads;
 		pads_cnt = ARRAY_SIZE(port2_tll_pads);
+
+		/* Errata i687: set I/O drive strength to 1 */
+		if (cpu_is_omap443x()) {
+			val = omap4_ctrl_pad_readl(OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_SMART2IO_PADCONF_2);
+			val |= OMAP4_USBB2_DR0_DS_MASK;
+			omap4_ctrl_pad_writel(val, OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_SMART2IO_PADCONF_2);
+		}
 			break;
 	case OMAP_USBHS_PORT_MODE_UNUSED:
 	default:
@@ -824,6 +841,16 @@ static void setup_4430ehci_drvstrength(const enum usbhs_omap_port_mode
 	default:
 		break;
 	}
+}
+
+int omap4430_usbhs_update_sar(void)
+{
+	if (usbhs_update_sar) {
+		usbhs_update_sar = 0;
+		return 1;
+	}
+
+	return 0;
 }
 
 void usbhs_wakeup()

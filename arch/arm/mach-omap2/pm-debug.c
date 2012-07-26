@@ -663,7 +663,7 @@ DEFINE_SIMPLE_ATTRIBUTE(pwrdm_suspend_fops, pwrdm_suspend_get,
 			pwrdm_suspend_set, "%llu\n");
 
 #ifdef CONFIG_PM_ADVANCED_DEBUG
-static bool is_addr_valid(void)
+static bool is_addr_valid()
 {
 	int saved_reg_addr_max = 0;
 	/* Only for OMAP4 for the timebeing */

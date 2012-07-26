@@ -286,6 +286,7 @@ void rfbi_bus_unlock(void);
 /* DSI */
 void dsi_bus_lock(struct omap_dss_device *dssdev);
 void dsi_bus_unlock(struct omap_dss_device *dssdev);
+bool dsi_bus_was_unlocked(struct omap_dss_device *dssdev);
 int dsi_vc_dcs_write(struct omap_dss_device *dssdev, int channel, u8 *data,
 		int len);
 int dsi_vc_dcs_write_0(struct omap_dss_device *dssdev, int channel,
@@ -454,6 +455,7 @@ struct omap_overlay_info {
 	u16 out_height;	/* if 0, out_height == height */
 	u8 global_alpha;
 	u8 pre_mult_alpha;
+	u8 wb_source;
 	enum omap_overlay_zorder zorder;
 	u16 min_x_decim, max_x_decim, min_y_decim, max_y_decim;
 	struct omap_dss_cconv_coefs cconv;
@@ -498,6 +500,9 @@ struct omap_overlay_manager_info {
 	bool trans_enabled;
 
 	bool alpha_enabled;
+
+	/* if true, manager is used in MEM2MEM mode */
+	bool wb_only;
 
 	struct omapdss_ovl_cb cb;
 
@@ -600,12 +605,15 @@ struct omap_writeback {
 	/* mutex to control access to wb data */
 	struct mutex			lock;
 	struct omap_writeback_info	info;
+	struct completion		wb_completion;
 
 	bool (*check_wb)(struct omap_writeback *wb);
 	int (*set_wb_info)(struct omap_writeback *wb,
 			struct omap_writeback_info *info);
 	void (*get_wb_info)(struct omap_writeback *wb,
 			struct omap_writeback_info *info);
+	int (*register_framedone)(struct omap_writeback *wb);
+	int (*wait_framedone)(struct omap_writeback *wb);
 };
 struct omap_dss_device {
 	struct device dev;
@@ -651,6 +659,7 @@ struct omap_dss_device {
 			struct omap_dsi_video_timings vm_timing;
 			struct omap_dsi_hs_mode_timing hs_timing;
 			bool d2l_use_ulps;
+			u8 line_bufs;
 		} dsi;
 
 		struct {
@@ -685,6 +694,18 @@ struct omap_dss_device {
 			u16 lp_clk_div;
 			unsigned offset_ddr_clk;
 			enum omap_dss_clk_source dsi_fclk_src;
+			u8 tlpx;
+			struct {
+				u8 zero;
+				u8 prepare;
+				u8 trail;
+			} tclk;
+			struct {
+				u8 zero;
+				u8 prepare;
+				u8 trail;
+				u8 exit;
+			} ths;
 		} dsi;
 
 		struct {
@@ -710,6 +731,9 @@ struct omap_dss_device {
 
 		u32 width_in_um;
 		u32 height_in_um;
+		u16 fb_xres;
+		u16 fb_yres;
+		u32 hdmi_default_cea_code;
 	} panel;
 
 	struct {
@@ -755,6 +779,11 @@ struct omap_dss_device {
 	int (*platform_enable_hpd)(struct omap_dss_device *dssdev);
 	void (*platform_disable_hpd)(struct omap_dss_device *dssdev);
 #endif
+};
+
+struct omap_dss_hdmi_data
+{
+	int hpd_gpio;
 };
 
 struct omap_dss_driver {

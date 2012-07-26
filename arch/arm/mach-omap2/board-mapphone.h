@@ -67,4 +67,7 @@ extern void mcbsp3_i2s1_pin_mux_switch(unsigned short incall);
 extern void __init omap_hsi_dev_init(void);
 #endif
 
+struct omap_ion_platform_data;
+void mapphone_android_display_setup(struct omap_ion_platform_data *ion);
+
 #endif

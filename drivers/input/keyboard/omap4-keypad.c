@@ -464,8 +464,6 @@ static int __devexit omap4_keypad_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-
 static int omap4_keypad_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);

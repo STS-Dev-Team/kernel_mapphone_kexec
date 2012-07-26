@@ -23,6 +23,7 @@
 
 #include <plat/gpio.h>
 #include <plat/omap_hwmod.h>
+#include <plat/android-display.h>
 #include <plat/vram.h>
 #include <video/panel.h>
 #include "control.h"
@@ -1275,6 +1276,15 @@ static void mapphone_panel_get_fb_info(void)
 #endif
 }
 
+void mapphone_android_display_setup(struct omap_ion_platform_data *ion)
+{
+	omap_android_display_setup(&mapphone_dss_data,
+				   NULL,
+				   NULL,
+				   &mapphone_fb_data,
+				   ion);
+}
+
 void __init mapphone_panel_init(void)
 {
 	struct mapphone_dsi_panel_pwr_supply *supply;
@@ -1385,7 +1395,6 @@ void __init mapphone_panel_init(void)
 	}
 
 	platform_device_register(&omap_panel_device);
-	omap_display_init(&mapphone_dss_data);
 
 	return;
 

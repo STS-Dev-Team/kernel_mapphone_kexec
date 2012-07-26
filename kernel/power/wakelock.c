@@ -315,6 +315,7 @@ static void suspend(struct work_struct *work)
 	}
 
 	entry_event_num = current_event_num;
+	sys_sync();
 	suspend_sync();
 
 	wait_for_completion_timeout(&suspend_sync_complete, HZ / 4);

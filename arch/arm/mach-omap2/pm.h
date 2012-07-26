@@ -14,6 +14,7 @@
 #include <linux/err.h>
 
 #include "powerdomain.h"
+
 extern void *omap3_secure_ram_storage;
 extern void omap3_pm_off_mode_enable(int);
 extern void omap_sram_idle(bool suspend);

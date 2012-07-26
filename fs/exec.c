@@ -1657,18 +1657,6 @@ put_exe_file:
 	return ret;
 }
 
-static void format_curr_comm(char *buf)
-{
-	int i;
-	int comm_size = sizeof(current->comm);
-
-	strncpy(buf, current->comm, comm_size);
-	for (i = 0; i < comm_size; i++) {
-		if (buf[i] == ' ')
-			buf[i] = '-';
-	}
-}
-
 /* format_corename will inspect the pattern parameter, and output a
  * name into corename, which must have space for at least
  * CORENAME_MAX_SIZE bytes plus one byte for the zero terminator.
@@ -1680,7 +1668,6 @@ static int format_corename(struct core_name *cn, long signr)
 	int ispipe = (*pat_ptr == '|');
 	int pid_in_pattern = 0;
 	int err = 0;
-	char comm[sizeof(current->comm)];
 
 	cn->size = CORENAME_MAX_SIZE * atomic_read(&call_count);
 	cn->corename = kmalloc(cn->size, GFP_KERNEL);
@@ -1739,9 +1726,7 @@ static int format_corename(struct core_name *cn, long signr)
 				break;
 			/* executable */
 			case 'e':
-				memset(comm, 0, sizeof((current->comm)));
-				format_curr_comm(comm);
-				err = cn_printf(cn, "%s", comm);
+				err = cn_printf(cn, "%s", current->comm);
 				break;
 			case 'E':
 				err = cn_print_exe_file(cn);

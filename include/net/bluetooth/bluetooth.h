@@ -66,10 +66,17 @@ struct bt_security {
 
 #define BT_DEFER_SETUP	7
 
+#define BT_FLUSHABLE	8
+
+#define BT_FLUSHABLE_OFF	0
+#define BT_FLUSHABLE_ON		1
+
 #define BT_POWER	9
 struct bt_power {
 	__u8 force_active;
 };
+#define BT_POWER_FORCE_ACTIVE_OFF 0
+#define BT_POWER_FORCE_ACTIVE_ON  1
 
 #define BT_AMP_POLICY          10
 
@@ -98,9 +105,12 @@ struct bt_power {
  */
 #define BT_AMP_POLICY_PREFER_AMP       2
 
-#define BT_INFO(fmt, arg...) printk(KERN_INFO "Bluetooth: " fmt "\n" , ## arg)
-#define BT_ERR(fmt, arg...)  printk(KERN_ERR "%s: " fmt "\n" , __func__ , ## arg)
-#define BT_DBG(fmt, arg...)  pr_debug("%s: " fmt "\n" , __func__ , ## arg)
+__attribute__((format (printf, 2, 3)))
+int bt_printk(const char *level, const char *fmt, ...);
+
+#define BT_INFO(fmt, arg...)   bt_printk(KERN_INFO, pr_fmt(fmt), ##arg)
+#define BT_ERR(fmt, arg...)    bt_printk(KERN_ERR, pr_fmt(fmt), ##arg)
+#define BT_DBG(fmt, arg...)    pr_debug(fmt "\n", ##arg)
 
 /* Connection and socket states */
 enum {
@@ -120,8 +130,8 @@ typedef struct {
 	__u8 b[6];
 } __packed bdaddr_t;
 
-#define BDADDR_ANY   (&(bdaddr_t) {{0, 0, 0, 0, 0, 0} })
-#define BDADDR_LOCAL (&(bdaddr_t) {{0, 0, 0, 0xff, 0xff, 0xff} })
+#define BDADDR_ANY   (&(bdaddr_t) {{0, 0, 0, 0, 0, 0}})
+#define BDADDR_LOCAL (&(bdaddr_t) {{0, 0, 0, 0xff, 0xff, 0xff}})
 
 /* Copy, swap, convert BD Address */
 static inline int bacmp(bdaddr_t *ba1, bdaddr_t *ba2)
@@ -163,7 +173,7 @@ int  bt_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 				struct msghdr *msg, size_t len, int flags);
 int  bt_sock_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 			struct msghdr *msg, size_t len, int flags);
-uint bt_sock_poll(struct file *file, struct socket *sock, poll_table *wait);
+uint bt_sock_poll(struct file * file, struct socket *sock, poll_table *wait);
 int  bt_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg);
 int  bt_sock_wait_state(struct sock *sk, int state, unsigned long timeo);
 
@@ -187,9 +197,11 @@ struct bt_skb_cb {
 	__u8 pkt_type;
 	__u8 incoming;
 	__u16 expect;
+	__u8 tx_seq;
 	__u8 retries;
-	__u8 force_active;
+	__u8 sar;
 	unsigned short channel;
+	__u8 force_active;
 	struct bt_l2cap_control control;
 };
 #define bt_cb(skb) ((struct bt_skb_cb *)((skb)->cb))
@@ -198,8 +210,7 @@ static inline struct sk_buff *bt_skb_alloc(unsigned int len, gfp_t how)
 {
 	struct sk_buff *skb;
 
-	skb = alloc_skb(len + BT_SKB_RESERVE, how);
-	if (skb) {
+	if ((skb = alloc_skb(len + BT_SKB_RESERVE, how))) {
 		skb_reserve(skb, BT_SKB_RESERVE);
 		bt_cb(skb)->incoming  = 0;
 	}
@@ -212,8 +223,7 @@ static inline struct sk_buff *bt_skb_send_alloc(struct sock *sk,
 	struct sk_buff *skb;
 
 	release_sock(sk);
-	skb = sock_alloc_send_skb(sk, len + BT_SKB_RESERVE, nb, err);
-	if (skb) {
+	if ((skb = sock_alloc_send_skb(sk, len + BT_SKB_RESERVE, nb, err))) {
 		skb_reserve(skb, BT_SKB_RESERVE);
 		bt_cb(skb)->incoming  = 0;
 	}
@@ -239,6 +249,7 @@ out:
 }
 
 int bt_err(__u16 code);
+int bt_to_errno(__u16 code);
 
 extern int hci_sock_init(void);
 extern void hci_sock_cleanup(void);

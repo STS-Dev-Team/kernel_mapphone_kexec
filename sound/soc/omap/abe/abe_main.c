@@ -845,3 +845,19 @@ void abe_src_filters_saturation_monitoring(void)
 	omap_abe_src_filters_saturation_monitoring(abe);
 }
 EXPORT_SYMBOL(abe_src_filters_saturation_monitoring);
+
+/**
+ * abe_write_select_pdm_output - Select the path for OPP25 route input
+ *
+ * Parameters:
+ *   path: 1 for output om headset, 2 for output on handsfree,
+ *	 3 for output on headset and handsfree at the same time
+ *
+ */
+void abe_write_select_pdm_output(u32 path)
+{
+	abe->mcpdm_path = path;
+}
+EXPORT_SYMBOL(abe_write_select_pdm_output);
+
+

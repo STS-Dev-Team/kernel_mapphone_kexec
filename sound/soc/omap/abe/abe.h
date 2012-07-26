@@ -107,6 +107,8 @@ struct omap_abe_equ {
 	s32 equ_param3;
 };
 
+// FIXME-HASH: moved to abe_dbg.h
+#if 0
 struct omap_abe {
 	void __iomem *io_base[5];
 	u32 firmware_version_number;
@@ -124,6 +126,7 @@ struct omap_abe {
 
 	struct omap_abe_dbg dbg;
 };
+#endif
 
 extern struct omap_abe *abe;
 

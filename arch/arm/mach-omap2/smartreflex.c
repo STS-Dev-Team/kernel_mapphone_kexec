@@ -27,6 +27,10 @@
 
 #include <plat/common.h>
 
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+#include <mach/omap4-common.h>
+#endif
+
 #include "pm.h"
 #include "dvfs.h"
 #include "smartreflex.h"
@@ -256,10 +260,20 @@ static void sr_set_clk_length(struct omap_sr *sr)
 			__func__);
 		return;
 	}
-	sys_clk_speed = clk_get_rate(sys_ck);
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+	if (omap4_is_in_dpll_cascading())
+		sys_clk_speed = 12288000;
+	else
+#endif
+		sys_clk_speed = clk_get_rate(sys_ck);
 	clk_put(sys_ck);
 
 	switch (sys_clk_speed) {
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+	case 12288000:
+		sr->clk_length = 0x3d;
+		break;
+#endif
 	case 12000000:
 		sr->clk_length = SRCLKLENGTH_12MHZ_SYSCLK;
 		break;
@@ -558,7 +572,9 @@ int sr_configure_errgen(struct voltagedomain *voltdm)
 		return -EINVAL;
 	}
 
+#ifndef CONFIG_OMAP4_DPLL_CASCADING
 	if (!sr->clk_length)
+#endif
 		sr_set_clk_length(sr);
 
 	senp_en = sr->senp_mod;
@@ -622,9 +638,6 @@ int sr_disable_errgen(struct voltagedomain *voltdm)
 			__func__, voltdm->name);
 		return -EINVAL;
 	}
-	/* Check if SR clocks are already disabled. If yes do nothing */
-	if (pm_runtime_suspended(&sr->pdev->dev))
-		return 0;
 
 	if (sr->ip_type == SR_TYPE_V1) {
 		errconfig_offs = ERRCONFIG_V1;
@@ -674,7 +687,9 @@ int sr_configure_minmax(struct voltagedomain *voltdm)
 		return -EINVAL;
 	}
 
+#ifndef CONFIG_OMAP4_DPLL_CASCADING
 	if (!sr->clk_length)
+#endif
 		sr_set_clk_length(sr);
 
 	senp_en = sr->senp_mod;
@@ -1173,8 +1188,6 @@ static int __init omap_sr_probe(struct platform_device *pdev)
 	}
 
 	dev_info(&pdev->dev, "%s: SmartReflex driver initialized\n", __func__);
-
-#ifdef CONFIG_DEBUG_FS
 	if (!sr_dbg_dir) {
 		sr_dbg_dir = debugfs_create_dir("smartreflex", NULL);
 		if (!sr_dbg_dir) {
@@ -1236,13 +1249,11 @@ static int __init omap_sr_probe(struct platform_device *pdev)
 		(void) debugfs_create_x32(name, S_IRUGO | S_IWUSR, nvalue_dir,
 				&(sr_info->nvalue_table[i].nvalue));
 	}
-#endif
+
 	return ret;
 
-#ifdef CONFIG_DEBUG_FS
 err_debugfs:
 	debugfs_remove_recursive(sr_info->dbg_dir);
-#endif
 err_iounmap:
 	list_del(&sr_info->node);
 	iounmap(sr_info->base);

@@ -112,6 +112,7 @@ bool hsi_is_channel_busy(struct hsi_channel *ch)
 }
 
 /* Check if a HSI port is busy :
+ * - ACWAKE is high
  * - data transfer (Write) is ongoing for a given HSI channel
  * - CAWAKE is high
  * - CAWAKE is not used (receiver in 3-wires mode)
@@ -141,7 +142,7 @@ bool hsi_is_hsi_port_busy(struct hsi_port *pport)
 		return true;
 	}
 
-	if (cur_cawake) {
+	if (cur_cawake || pport->acwake_status) {
 		dev_dbg(hsi_ctrl->dev, "Port %d: WAKE status: acwake_status %d,"
 			"cur_cawake %d", pport->port_number,
 			pport->acwake_status, cur_cawake);
@@ -559,6 +560,9 @@ int hsi_do_cawake_process(struct hsi_port *pport)
 		}
 		pport->cawake_status = 1;
 
+		/* Allow data reception */
+		hsi_hsr_resume(hsi_ctrl);
+
 		spin_unlock(&hsi_ctrl->lock);
 		hsi_port_event_handler(pport, HSI_EVENT_CAWAKE_UP, NULL);
 		spin_lock(&hsi_ctrl->lock);
@@ -596,6 +600,9 @@ int hsi_do_cawake_process(struct hsi_port *pport)
 						 true);
 		}
 		pport->cawake_status = 0;
+
+		/* Forbid data reception */
+		hsi_hsr_suspend(hsi_ctrl);
 
 		spin_unlock(&hsi_ctrl->lock);
 		hsi_port_event_handler(pport, HSI_EVENT_CAWAKE_DOWN, NULL);
@@ -740,9 +747,10 @@ static u32 hsi_process_int_event(struct hsi_port *pport)
 
 	/* If another CAWAKE interrupt occured while previous is still being
 	 * processed, mark it for extra processing */
-	if (hsi_driver_is_interrupt_pending(pport, HSI_CAWAKEDETECTED, true)) {
+	if (hsi_driver_is_interrupt_pending(pport, HSI_CAWAKEDETECTED, true) &&
+	    (status_reg & HSI_CAWAKEDETECTED)) {
 		dev_warn(pport->hsi_controller->dev, "New CAWAKE interrupt "
-			 "detected during interrupt procesing\n");
+			 "detected during interrupt processing\n");
 		/* Force processing of backup CAWAKE interrupt */
 		pport->cawake_double_int = true;
 	}

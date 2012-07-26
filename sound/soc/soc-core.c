@@ -30,6 +30,7 @@
 #include <linux/bitops.h>
 #include <linux/debugfs.h>
 #include <linux/platform_device.h>
+#include <linux/ctype.h>
 #include <linux/slab.h>
 #include <sound/ac97_codec.h>
 #include <sound/core.h>
@@ -600,7 +601,8 @@ int soc_pcm_open(struct snd_pcm_substream *substream)
 	if (rtd->dai_link->ops && rtd->dai_link->ops->startup) {
 		ret = rtd->dai_link->ops->startup(substream);
 		if (ret < 0) {
-			printk(KERN_ERR "asoc: %s startup failed\n", rtd->dai_link->name);
+			printk(KERN_ERR "asoc: %s startup failed\n",
+				rtd->dai_link->name);
 			goto machine_err;
 		}
 	}
@@ -703,6 +705,7 @@ dynamic:
 	cpu_dai->active++;
 	codec_dai->active++;
 	rtd->codec->active++;
+	rtd->dai_link->active++;
 	mutex_unlock(&rtd->pcm_mutex);
 	return 0;
 
@@ -784,6 +787,7 @@ int soc_pcm_close(struct snd_pcm_substream *substream)
 	cpu_dai->active--;
 	codec_dai->active--;
 	codec->active--;
+	rtd->dai_link->active--;
 
 	/* Muting the DAC suppresses artifacts caused during digital
 	 * shutdown, for example from stopping clocks.
@@ -1130,6 +1134,21 @@ struct snd_soc_codec *snd_soc_card_get_codec(struct snd_soc_card *card,
 	return codec;
 }
 EXPORT_SYMBOL(snd_soc_card_get_codec);
+
+int snd_soc_card_active_links(struct snd_soc_card *card)
+{
+	int i;
+	int count = 0;
+
+	for (i = 0; i < card->num_rtd; i++) {
+		/* count FEs: dynamic and legacy */
+		if (!card->rtd[i].dai_link->no_pcm)
+			count += card->rtd[i].dai_link->active;
+	}
+
+	return count;
+}
+EXPORT_SYMBOL(snd_soc_card_active_links);
 
 struct snd_pcm_substream *snd_soc_get_dai_substream(struct snd_soc_card *card,
 		const char *dai_link, int stream)
@@ -2157,9 +2176,20 @@ static void snd_soc_instantiate_card(struct snd_soc_card *card)
 		 "%s", card->name);
 	snprintf(card->snd_card->longname, sizeof(card->snd_card->longname),
 		 "%s", card->long_name ? card->long_name : card->name);
-	if (card->driver_name)
-		strlcpy(card->snd_card->driver, card->driver_name,
-			sizeof(card->snd_card->driver));
+	snprintf(card->snd_card->driver, sizeof(card->snd_card->driver),
+		 "%s", card->driver_name ? card->driver_name : card->name);
+	for (i = 0; i < ARRAY_SIZE(card->snd_card->driver); i++) {
+		switch (card->snd_card->driver[i]) {
+		case '_':
+		case '-':
+		case '\0':
+			break;
+		default:
+			if (!isalnum(card->snd_card->driver[i]))
+				card->snd_card->driver[i] = '_';
+			break;
+		}
+	}
 
 	if (card->late_probe) {
 		ret = card->late_probe(card);

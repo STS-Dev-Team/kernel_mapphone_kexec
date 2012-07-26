@@ -1325,7 +1325,7 @@ static int omap_gpio_resume(struct device *dev)
 static void omap_gpio_save_context(struct gpio_bank *bank);
 static void omap_gpio_restore_context(struct gpio_bank *bank);
 
-static void omap2_gpio_set_wakeupenables(struct gpio_bank *bank)
+static void omap2_gpio_set_wakeupenables(struct gpio_bank *bank, bool suspend)
 {
 	unsigned long pad_wakeup;
 	int i;
@@ -1337,8 +1337,10 @@ static void omap2_gpio_set_wakeupenables(struct gpio_bank *bank)
 				"failed\n", __func__, bank->id);
 		return;
 	}
-
-	pad_wakeup = __raw_readl(bank->base + bank->regs->irqenable);
+	if (suspend)
+		pad_wakeup = bank->suspend_wakeup;
+	else
+		pad_wakeup = __raw_readl(bank->base + bank->regs->irqenable);
 
 	/*
 	 * HACK: Ignore gpios that have multiple sources.
@@ -1454,7 +1456,6 @@ static int omap_gpio_pm_runtime_resume(struct device *dev)
 	 * horribly racy, but it's the best we can do to work around
 	 * this silicon bug. */
 	l ^= bank->saved_datain;
-
 	l &= bank->enabled_non_wakeup_gpios;
 
 	/* Force trigger irq if wakeup from it */
@@ -1497,14 +1498,19 @@ static int omap_gpio_pm_runtime_resume(struct device *dev)
 		old1 = __raw_readl(bank->base +
 					bank->regs->leveldetect1);
 
+		__raw_writel(old0, bank->base +
+					bank->regs->leveldetect0);
+		__raw_writel(old1, bank->base +
+					bank->regs->leveldetect1);
 		if (cpu_is_omap24xx() || cpu_is_omap34xx()) {
-			l = gen;
+			old0 |= gen;
+			old1 |= gen;
 		}
 
-		__raw_writel(old0 | l, bank->base +
-					bank->regs->leveldetect0);
-		__raw_writel(old1 | l, bank->base +
-					bank->regs->leveldetect1);
+		if (cpu_is_omap44xx()) {
+			old0 |= l;
+			old1 |= l;
+		}
 		__raw_writel(old0, bank->base +
 					bank->regs->leveldetect0);
 		__raw_writel(old1, bank->base +
@@ -1619,7 +1625,7 @@ int omap2_gpio_prepare_for_idle(int off_mode, bool suspend)
 		if (!bank->mod_usage)
 			continue;
 
-		omap2_gpio_set_wakeupenables(bank);
+		omap2_gpio_set_wakeupenables(bank, suspend);
 
 		if (omap2_gpio_set_edge_wakeup(bank, suspend))
 			ret = -EBUSY;

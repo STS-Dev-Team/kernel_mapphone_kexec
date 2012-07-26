@@ -36,6 +36,10 @@ static unsigned int omap_revision;
 u32 omap3_features;
 u32 omap4_features;
 
+#define MAX_ID_STRING          (4*8 + 4)
+#define DIE_ID_REG_BASE                (L4_44XX_PHYS + 0x2000)
+#define DIE_ID_REG_OFFSET      0x200
+
 unsigned int omap_rev(void)
 {
 	return omap_revision;
@@ -78,6 +82,8 @@ out:
 }
 EXPORT_SYMBOL(omap_type);
 
+#define OMAP4_SILICON_TYPE_STANDARD	0x01
+#define OMAP4_SILICON_TYPE_PERFORMANCE	0x02
 
 /*----------------------------------------------------------------------------*/
 
@@ -242,9 +248,12 @@ static void __init omap4_check_features(void)
 
 	si_type =
 	  (read_tap_reg(OMAP4_CTRL_MODULE_CORE_STD_FUSE_PROD_ID_1) >> 16) & 3;
+#ifdef CONFIG_FORCE_SILICON_PERFORMANCE
+	si_type = OMAP4_SILICON_TYPE_PERFORMANCE;
+#endif
 
 	switch (si_type) {
-	case 0x2:
+	case OMAP4_SILICON_TYPE_PERFORMANCE:
 		/* High performance device */
 		if (cpu_is_omap443x()) {
 			omap4_features |= OMAP4_HAS_MPU_1GHZ;
@@ -252,15 +261,21 @@ static void __init omap4_check_features(void)
 		} else if (cpu_is_omap446x()) {
 			omap4_features |= OMAP4_HAS_MPU_1_2GHZ;
 			omap4_features |= OMAP4_HAS_MPU_1_5GHZ;
+			omap4_features |= OMAP4_HAS_IVA_500MHZ;
 		}
-		break;
-	case 0x1:
+		/* Fall through to Standard device features */
+	case OMAP4_SILICON_TYPE_STANDARD:
 	default:
 		/* Standard device */
 		if (cpu_is_omap443x())
 			omap4_features |= OMAP4_HAS_MPU_1GHZ;
-		else if (cpu_is_omap446x())
+		else if (cpu_is_omap446x()) {
 			omap4_features |= OMAP4_HAS_MPU_1_2GHZ;
+			omap4_features |= OMAP4_HAS_IVA_430MHZ;
+		} else if (cpu_is_omap447x()) {
+			omap4_features |= OMAP4_HAS_MPU_1_3GHZ;
+			omap4_features |= OMAP4_HAS_IVA_430MHZ;
+		}
 		break;
 	}
 }
@@ -474,6 +489,15 @@ static void __init omap4_check_revision(void)
 			break;
 		}
 		break;
+	case 0xb975:
+		switch (rev) {
+		case 0:
+		default:
+			omap_revision = OMAP4470_REV_ES1_0;
+			omap_chip.oc |= CHIP_IS_OMAP4470ES1_0;
+			break;
+		}
+		break;
 	default:
 		/* Unknown default to latest silicon rev as default */
 		omap_revision = OMAP4430_REV_ES2_3;
@@ -513,8 +537,8 @@ static void __init omap4_check_revision(void)
 	snprintf(id_string, MAX_ID_STRING, "%08X-%08X",
 						opi.id_1, opi.id_0);
 
-	pr_info("Prod-id  (%s)\n", id_string);
-	pr_info("***********************");
+       pr_info("Prod-id  (%s)\n", id_string);
+       pr_info("***********************\n");
 
 	/* Print socinfo information */
 	sz = snprintf(socinfo, SOCINFO_SZ, "OMAP%04x ES%d.%d type(%s)\n",
@@ -650,24 +674,6 @@ static void __init omap3_cpuinfo(void)
 			read_tap_reg(OMAP_TAP_PROD_ID_3));
 
 }
-
-#ifdef CONFIG_OMAP3_EXPORT_DIE_ID
-static int __init omap3_die_id_setup(char *s)
-{
-	int sz;
-
-	sz = strlen(socinfo);
-	snprintf(socinfo + sz, SOCINFO_SZ - sz,
-			"\nDie ID\t: %08x %08x %08x %08x",
-			read_tap_reg(OMAP_TAP_DIE_ID_0),
-			read_tap_reg(OMAP_TAP_DIE_ID_1),
-			read_tap_reg(OMAP_TAP_DIE_ID_2),
-			read_tap_reg(OMAP_TAP_DIE_ID_3));
-
-	return 1;
-}
-__setup("omap3_die_id", omap3_die_id_setup);
-#endif
 
 static int omap_socinfo_show(struct seq_file *m, void *v)
 {
