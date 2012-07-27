@@ -652,7 +652,9 @@ static int __init clk_disable_unused(void)
 		if (ck->usecount > 0 || !ck->enable_reg)
 			continue;
 
-		arch_clock->clk_disable_unused(ck);
+			printk("Should be disabling clock: %s\n", ck->name);
+			//TODO: disabled for now because of trouble
+			//arch_clock->clk_disable_unused(ck);
 	}
 	spin_unlock_irqrestore(&clockfw_lock, flags);
 
