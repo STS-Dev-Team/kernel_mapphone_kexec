@@ -3929,11 +3929,20 @@ static int omap4_virt_l3_set_rate(struct clk *clk, unsigned long rate)
 #define DPLL_IVA_M5_OPPNITRO_RATE	430000000
 #define DPLL_IVA_M5_OPPNITROSB_RATE	500000000
 
+#if 0
 #define DPLL_IVA_OPP50_RATE		1862400000
 #define DPLL_IVA_OPP100_RATE		1862400000
 #define DPLL_IVA_OPPTURBO_RATE		992000000
 #define DPLL_IVA_OPPNITRO_RATE		1290000000
 #define DPLL_IVA_OPPNITROSB_RATE	1500000000
+#else
+/* Use Jonpry's values */
+#define DPLL_IVA_OPP50_RATE		1859000000
+#define DPLL_IVA_OPP100_RATE		1859000000
+#define DPLL_IVA_OPPTURBO_RATE		988000000
+#define DPLL_IVA_OPPNITRO_RATE		1287000000
+#define DPLL_IVA_OPPNITROSB_RATE	1508000000
+#endif
 
 struct virt_iva_ck_deps {
 	unsigned long iva_ck_rate;
