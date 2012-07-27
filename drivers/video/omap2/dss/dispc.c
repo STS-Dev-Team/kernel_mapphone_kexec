@@ -1409,6 +1409,7 @@ u32 dispc_get_plane_fifo_size(enum omap_plane plane)
 void dispc_setup_plane_fifo(enum omap_plane plane, u32 low, u32 high)
 {
 	u8 hi_start, hi_end, lo_start, lo_end;
+	u32 fifosize;
 
 	dispc_runtime_get();
 	dss_feat_get_reg_field(FEAT_REG_FIFOHIGHTHRESHOLD, &hi_start, &hi_end);
@@ -1430,9 +1431,16 @@ void dispc_setup_plane_fifo(enum omap_plane plane, u32 low, u32 high)
 			FLD_VAL(high, hi_start, hi_end) |
 			FLD_VAL(low, lo_start, lo_end));
 
+	if (plane == OMAP_DSS_GFX) {
+		/* give high priority to GFX pipe */
+		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(OMAP_DSS_GFX), 1, 14, 14);
+	}
+
+	fifosize = dispc_get_plane_fifo_size(plane);
+
 	if (dss_has_feature(FEAT_GLOBAL_MFLAG))
 		dispc_write_reg(DISPC_OVL_MFLAG_THRESHOLD(plane),
-			FLD_VAL(high, 31, 16) | FLD_VAL(low, 15, 0));
+			FLD_VAL((fifosize*5)/8, 31, 16) | FLD_VAL((fifosize*4)/8, 15, 0));
 
 	dispc_runtime_put();
 }
@@ -1698,57 +1706,60 @@ static void _dispc_set_rotation_attrs(enum omap_plane plane, u8 rotation,
 		bool mirroring, enum omap_color_mode color_mode,
 		enum omap_dss_rotation_type type)
 {
-	bool row_repeat = false;
-	int vidrot = 0;
+	if (plane != OMAP_DSS_WB) {
+		bool row_repeat = false;
+		int vidrot = 0;
 
-	if (color_mode == OMAP_DSS_COLOR_YUV2 ||
-			color_mode == OMAP_DSS_COLOR_UYVY) {
+		if (color_mode == OMAP_DSS_COLOR_YUV2 ||
+				color_mode == OMAP_DSS_COLOR_UYVY) {
 
-		if (mirroring) {
-			switch (rotation) {
-			case OMAP_DSS_ROT_0:
-				vidrot = 2;
-				break;
-			case OMAP_DSS_ROT_90:
-				vidrot = 1;
-				break;
-			case OMAP_DSS_ROT_180:
-				vidrot = 0;
-				break;
-			case OMAP_DSS_ROT_270:
-				vidrot = 3;
-				break;
+			if (mirroring) {
+				switch (rotation) {
+				case OMAP_DSS_ROT_0:
+					vidrot = 2;
+					break;
+				case OMAP_DSS_ROT_90:
+					vidrot = 1;
+					break;
+				case OMAP_DSS_ROT_180:
+					vidrot = 0;
+					break;
+				case OMAP_DSS_ROT_270:
+					vidrot = 3;
+					break;
+				}
+			} else {
+				switch (rotation) {
+				case OMAP_DSS_ROT_0:
+					vidrot = 0;
+					break;
+				case OMAP_DSS_ROT_90:
+					vidrot = 1;
+					break;
+				case OMAP_DSS_ROT_180:
+					vidrot = 2;
+					break;
+				case OMAP_DSS_ROT_270:
+					vidrot = 3;
+					break;
+				}
 			}
-		} else {
-			switch (rotation) {
-			case OMAP_DSS_ROT_0:
-				vidrot = 0;
-				break;
-			case OMAP_DSS_ROT_90:
-				vidrot = 1;
-				break;
-			case OMAP_DSS_ROT_180:
-				vidrot = 2;
-				break;
-			case OMAP_DSS_ROT_270:
-				vidrot = 3;
-				break;
-			}
+
+			if (rotation == OMAP_DSS_ROT_90 ||
+					rotation == OMAP_DSS_ROT_270)
+				row_repeat = true;
+			else
+				row_repeat = false;
+		} else if (color_mode == OMAP_DSS_COLOR_NV12) {
+			/* WA for OMAP4+ UV plane overread HW bug */
+			vidrot = 1;
 		}
 
-		if (rotation == OMAP_DSS_ROT_90 || rotation == OMAP_DSS_ROT_270)
-			row_repeat = true;
-		else
-			row_repeat = false;
-	} else if (color_mode == OMAP_DSS_COLOR_NV12) {
-		/* WA for OMAP4+ UV plane overread HW bug */
-		vidrot = 1;
+		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane), vidrot, 13, 12);
+		if (dss_has_feature(FEAT_ROWREPEATENABLE))
+			REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane),
+					row_repeat ? 1 : 0, 18, 18);
 	}
-
-	REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane), vidrot, 13, 12);
-	if (dss_has_feature(FEAT_ROWREPEATENABLE))
-		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane),
-			row_repeat ? 1 : 0, 18, 18);
 
 	if (color_mode == OMAP_DSS_COLOR_NV12) {
 		/* this will never happen for GFX */
@@ -2659,13 +2670,17 @@ int dispc_setup_wb(struct writeback_cache_data *wb)
 
 	dispc_setup_wb_source(source);
 
-	/* configure wb source */
-	if (source == OMAP_WB_TV)
-		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane), 2, 18, 16);
-	else if (source == OMAP_WB_LCD2)
-		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane), 1, 18, 16);
-	else
-		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane), source, 18, 16);
+	/* change resolution of manager if it works in MEM2MEM mode */
+	if (wb->mode == OMAP_WB_MEM2MEM_MODE) {
+		if (source == OMAP_WB_TV)
+			dispc_set_digit_size(out_width, out_height);
+		else if (source == OMAP_WB_LCD2)
+			dispc_set_lcd_size(OMAP_DSS_CHANNEL_LCD2, out_width,
+								out_height);
+		else if (source == OMAP_WB_LCD1)
+			dispc_set_lcd_size(OMAP_DSS_CHANNEL_LCD, out_width,
+								out_height);
+	}
 
 	/*
 	 * configure wb mode:
@@ -2759,6 +2774,9 @@ int dispc_setup_wb(struct writeback_cache_data *wb)
 		/* DOUBLESTRIDE */
 		REG_FLD_MOD(DISPC_OVL_ATTRIBUTES(plane), 0x1, 22, 22);
 	}
+
+	_dispc_set_rotation_attrs(plane, rotation, mirror,
+				color_mode, wb->rotation_type);
 
 	_dispc_set_row_inc(plane, row_inc);
 	_dispc_set_pix_inc(plane, pix_inc);
@@ -3710,6 +3728,29 @@ static void _dispc_set_pol_freq(enum omap_channel channel, bool onoff, bool rf,
 	dispc_runtime_put();
 }
 
+static void dispc_get_pol_freq(enum omap_channel channel,
+			enum omap_panel_config *config, u8 *acbi, u8 *acb)
+{
+	u32 l = dispc_read_reg(DISPC_POL_FREQ(channel));
+	*config = 0;
+
+	if (FLD_GET(l, 17, 17))
+		*config |= OMAP_DSS_LCD_ONOFF;
+	if (FLD_GET(l, 16, 16))
+		*config |= OMAP_DSS_LCD_RF;
+	if (FLD_GET(l, 15, 15))
+		*config |= OMAP_DSS_LCD_IEO;
+	if (FLD_GET(l, 14, 14))
+		*config |= OMAP_DSS_LCD_IPC;
+	if (FLD_GET(l, 13, 13))
+		*config |= OMAP_DSS_LCD_IHS;
+	if (FLD_GET(l, 12, 12))
+		*config |= OMAP_DSS_LCD_IVS;
+
+	*acbi = FLD_GET(l, 11, 8);
+	*acb = FLD_GET(l, 7, 0);
+}
+
 void dispc_set_pol_freq(enum omap_channel channel,
 		enum omap_panel_config config, u8 acbi, u8 acb)
 {
@@ -4409,8 +4450,11 @@ static void _omap_dispc_initial_config(void)
 		dispc_write_reg(DISPC_DIVISOR, l);
 	}
 
-	l3_1_clkdm = clkdm_lookup("l3_1_clkdm");
-	l3_2_clkdm = clkdm_lookup("l3_2_clkdm");
+	/* for OMAP4 ERRATUM xxxx: Mstandby and disconnect protocol issue */
+	if (cpu_is_omap44xx()) {
+		l3_1_clkdm = clkdm_lookup("l3_1_clkdm");
+		l3_2_clkdm = clkdm_lookup("l3_2_clkdm");
+	}
 
 	/* FUNCGATED */
 	if (dss_has_feature(FEAT_FUNCGATED))
