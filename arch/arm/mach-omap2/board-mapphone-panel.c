@@ -1395,6 +1395,7 @@ void __init mapphone_panel_init(void)
 	}
 
 	platform_device_register(&omap_panel_device);
+	omap_display_init(&mapphone_dss_data);
 
 	return;
 
