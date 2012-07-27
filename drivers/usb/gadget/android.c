@@ -1993,6 +1993,7 @@ static int __init init(void)
 	INIT_LIST_HEAD(&dev->enabled_functions);
 	INIT_WORK(&dev->work, android_work);
 	INIT_WORK(&dev->enumeration_work, android_enumeration_work);
+	mutex_init(&dev->mutex);
 
 	err = android_create_device(dev);
 	if (err) {
