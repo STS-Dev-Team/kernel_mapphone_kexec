@@ -501,7 +501,6 @@ struct snd_soc_dsp_link fe_lp_media = {
 
 /* Digital audio interface glue - connects codec <--> CPU */
 static struct snd_soc_dai_link motsnd_dai[] = {
-//#ifdef MOTSND_CONFIG_ENABLE_ABE
 #ifdef ABE_BYPASS
 {
 	.name = "Multimedia",
@@ -515,6 +514,7 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 	.ignore_suspend = 1,
 },
 #endif
+#ifndef ABE_BYPASS
 {
 	.name = "Multimedia LP",
 	.stream_name = "Multimedia",
@@ -527,9 +527,7 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 //	.fe_playback_channels = 2,
 	.ignore_suspend = 1,
 },
-//#else
-
-//#endif /*ENABLE_ABE*/
+#endif
 {
 	.name = "Voice",
 	.stream_name = "McBSP3-Codec",
@@ -608,6 +606,7 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 	.ops = &motsnd_bpvoice_ops,
 	.ignore_suspend = 1,
 },
+#if 0
 {
 	.name = "VoiceCall Second",
 	.stream_name = "Modem-Codec-Second",
@@ -630,6 +629,21 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 	.ops = &motsnd_incall_ops,
 	.ignore_suspend = 1,
 },
+#endif
+#ifdef ABE_BYPASS
+{
+	.name = "Multimedia LP",
+	.stream_name = "Multimedia",
+	.cpu_dai_name = "MultiMedia1 LP",
+	.platform_name = "aess",
+	.dynamic = 1,
+	.dsp_link = &fe_lp_media,
+//	.supported_be = mm1_be,
+//	.num_be = ARRAY_SIZE(mm1_be),
+//	.fe_playback_channels = 2,
+	.ignore_suspend = 1,
+},
+#endif
 #ifdef MOTSND_CONFIG_ENABLE_ABE
 {
 	.name = OMAP_ABE_BE_MM_EXT0,
@@ -698,3 +712,4 @@ module_exit(motsnd_soc_exit);
 MODULE_AUTHOR("Motorola");
 MODULE_DESCRIPTION("ALSA SoC MOTSND");
 MODULE_LICENSE("GPL");
+
