@@ -144,7 +144,7 @@
 #define is_ehci_phy_mode(x)	(x == OMAP_EHCI_PORT_MODE_PHY)
 #define is_ehci_tll_mode(x)	(x == OMAP_EHCI_PORT_MODE_TLL)
 #define is_ehci_hsic_mode(x)	(x == OMAP_EHCI_PORT_MODE_HSIC)
-#define MAX_WAKELOCK_TIME       (300*HZ)
+#define MAX_WAKELOCK_TIME       (30*HZ)
 
 
 struct usbhs_hcd_omap {
