@@ -57,7 +57,7 @@
 #include <video/omapdss.h>
 #include <video/omap-panel-nokia-dsi.h>
 #include <plat/omap-pm.h>
-//#include <plat/hdq.h>
+#include <plat/hdq.h>
 #include <plat/cpu.h>
 
 #include <mach/system.h>
@@ -1120,12 +1120,10 @@ static void __init mapphone_power_off_init(void)
 	platform_driver_register(&cpcap_charger_connected_driver);
 }
 
-#if 0
 static struct omap2_hdq_platform_config mapphone_hdq_data = {
 	.mode = OMAP_SDQ_MODE,
 	.id = W1_EEPROM_DS2502,
 };
-#endif
 
 static struct omap_musb_board_data musb_board_data = {
 	.interface_type         = MUSB_INTERFACE_ULPI,
@@ -1442,7 +1440,7 @@ static void __init mapphone_init(void)
 	mapphone_vibrator_init();
 	mapphone_sensors_init();
 	omap4_mapphone_wifi_init();
-//	omap_hdq1w_init(&mapphone_hdq_data);
+	omap_hdq1w_init(&mapphone_hdq_data);
 
 	mapphone_usbhost_init();
 	mapphone_musb_init();
@@ -1487,6 +1485,9 @@ static void __init mapphone_map_io(void)
 {
 	omap2_set_globals_443x();
 	omap44xx_map_common_io();
+
+	omap_writel(0x10,0x4A306500);
+
 }
 static void __init mapphone_reserve(void)
 {
