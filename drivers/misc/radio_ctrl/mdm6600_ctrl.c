@@ -301,7 +301,6 @@ static void update_bp_status(void)
 	int i;
 	int bp_power_prev_idx = bp_power_idx;
 
-	printk("%s get_bp_status\n",__func__);
 	bp_status_idx = get_bp_status();
 	/* No CDMA network when first power on after upgrade the software,
 	 * because the bp status is not right, so wait for bp ready status
@@ -310,7 +309,6 @@ static void update_bp_status(void)
 	 * changes from undefined status to awake status.
 	 */
 
-	printk("%s wait for not undefined %d\n", __func__, bp_status_prev_idx);
 /*
 	if (bp_status_prev_idx == BP_STATUS_UNDEFINED) {
 		for (i = 0; i < 100; i++) {
@@ -322,16 +320,15 @@ static void update_bp_status(void)
 	}
 */
 
-	printk("%s get_bp_power_status\n",__func__);
 	bp_power_idx = get_bp_power_status();
 
 	if (bp_power_idx == bp_power_prev_idx)
-		printk("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
+		pr_debug("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
 			bp_status_string(bp_status_prev_idx),
 			bp_status_string(bp_status_idx),
 			bp_power_state_string(bp_power_idx));
 	else
-		printk("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
+		pr_info("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
 			bp_status_string(bp_status_prev_idx),
 			bp_status_string(bp_status_idx),
 			bp_power_state_string(bp_power_idx));
@@ -340,8 +337,7 @@ static void update_bp_status(void)
 		mdm6600_ctrl_bp_is_shutdown = false;
 	else
 		mdm6600_ctrl_bp_is_shutdown = true;
-	printk("%s emit uevent\n",__func__);
-	kobject_uevent(&radio_cdev.dev->kobj, KOBJ_CHANGE);
+ 	kobject_uevent(&radio_cdev.dev->kobj, KOBJ_CHANGE);
 }
 
 static void mdm_ctrl_powerup(void)
@@ -381,8 +377,8 @@ static void mdm_ctrl_powerup(void)
 	else if (mdm_ctrl.pdata->mapphone_bpwake_device) {
 		msleep(500);
 		pr_info("%s: re-register bpwake device\n", __func__);
-		platform_device_del(mdm_ctrl.pdata->mapphone_bpwake_device);
-		platform_device_add(mdm_ctrl.pdata->mapphone_bpwake_device);
+	//	platform_device_del(mdm_ctrl.pdata->mapphone_bpwake_device);
+	//	platform_device_add(mdm_ctrl.pdata->mapphone_bpwake_device);
 	}
 	mutex_unlock(&mdm_power_lock);
 	/* now let user handles bp status change through uevent */
