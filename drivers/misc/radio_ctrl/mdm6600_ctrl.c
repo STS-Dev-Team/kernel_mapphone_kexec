@@ -377,8 +377,8 @@ static void mdm_ctrl_powerup(void)
 	else if (mdm_ctrl.pdata->mapphone_bpwake_device) {
 		msleep(500);
 		pr_info("%s: re-register bpwake device\n", __func__);
-	//	platform_device_del(mdm_ctrl.pdata->mapphone_bpwake_device);
-	//	platform_device_add(mdm_ctrl.pdata->mapphone_bpwake_device);
+		platform_device_del(mdm_ctrl.pdata->mapphone_bpwake_device);
+		platform_device_add(mdm_ctrl.pdata->mapphone_bpwake_device);
 	}
 	mutex_unlock(&mdm_power_lock);
 	/* now let user handles bp status change through uevent */
