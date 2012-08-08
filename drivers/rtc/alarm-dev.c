@@ -29,6 +29,8 @@
 #include <linux/rtc.h>
 #endif
 
+#define REWRITE_PAST_ALARMS
+
 #define ANDROID_ALARM_PRINT_INFO (1U << 0)
 #define ANDROID_ALARM_PRINT_IO (1U << 1)
 #define ANDROID_ALARM_PRINT_INT (1U << 2)
@@ -68,6 +70,8 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct timespec new_alarm_time;
 	struct timespec new_rtc_time;
 	struct timespec tmp_time;
+	ktime_t new_alarm_ktime;
+	ktime_t realtime;
 	enum android_alarm_type alarm_type = ANDROID_ALARM_IOCTL_TO_TYPE(cmd);
 	uint32_t alarm_type_mask = 1U << alarm_type;
 #ifdef CONFIG_POWEROFF_ALARM
@@ -146,9 +150,21 @@ from_old_alarm_set:
 		pr_alarm(IO, "alarm %d set %ld.%09ld\n", alarm_type,
 			new_alarm_time.tv_sec, new_alarm_time.tv_nsec);
 		alarm_enabled |= alarm_type_mask;
+
+		new_alarm_ktime = timespec_to_ktime(new_alarm_time);
+#ifdef REWRITE_PAST_ALARMS
+		if(ktime_to_ns(new_alarm_ktime) < ktime_to_ns(alarm_get_elapsed_realtime()))
+		{
+			pr_alarm(IO, "Alarm in the past, rewriting rtime %lld\n", ktime_to_ns(alarm_get_elapsed_realtime()));
+			//Requested time was in regular ktime. so convert to delta from realtime
+			new_alarm_ktime = ktime_sub(new_alarm_ktime,ktime_get());
+			realtime = alarm_get_elapsed_realtime();
+			new_alarm_ktime = ktime_add(new_alarm_ktime,realtime);
+		}
+#endif;
+
 		alarm_start_range(&alarms[alarm_type],
-			timespec_to_ktime(new_alarm_time),
-			timespec_to_ktime(new_alarm_time));
+			new_alarm_ktime, new_alarm_ktime);
 		spin_unlock_irqrestore(&alarm_slock, flags);
 #ifdef CONFIG_POWEROFF_ALARM
 		if (alarm_type == ANDROID_ALARM_POWEROFF_WAKEUP) {
@@ -233,6 +249,7 @@ from_old_alarm_set:
 			break;
 		case ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP:
 		case ANDROID_ALARM_ELAPSED_REALTIME:
+			pr_alarm(IO, "Get elapsed realtime\n"); 
 			tmp_time =
 				ktime_to_timespec(alarm_get_elapsed_realtime());
 			break;
