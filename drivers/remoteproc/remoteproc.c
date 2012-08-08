@@ -828,7 +828,7 @@ static int rproc_handle_resources(struct rproc *rproc, struct fw_resource *rsc,
 	while (len >= sizeof(*rsc) && !ret) {
 		da = rsc->da;
 		pa = rsc->pa;
-		dev_dbg(dev, "resource: type %d, da 0x%llx, pa 0x%llx, "
+		printk("resource: type %d, da 0x%llx, pa 0x%llx, "
 			"mapped pa: 0x%x, len 0x%x, reserved 0x%x, "
 			"name %s\n", rsc->type, rsc->da, rsc->pa, pa,
 			rsc->len, rsc->reserved, rsc->name);
@@ -903,8 +903,8 @@ static int rproc_handle_resources(struct rproc *rproc, struct fw_resource *rsc,
 				if (ret &&
 					strcmp(rsc->name, "DSP_MEM_IOBUFS")) {
 					dev_err(dev, "static memory for %s "
-						"doesn't belong to poolmem\n",
-						rsc->name);
+						"doesn't belong to poolmem (base=0x%x, len=0x%x)\n",
+						rsc->name, rproc->memory_pool->st_base, rproc->memory_pool->st_size);
 					break;
 				}
 			}

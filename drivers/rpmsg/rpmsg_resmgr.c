@@ -48,7 +48,7 @@
 static struct dentry *rprm_dbg;
 
 static char *regulator_name[] = {
-	"cam2pwr"
+	"vcam"
 };
 
 static char *clk_src_name[] = {

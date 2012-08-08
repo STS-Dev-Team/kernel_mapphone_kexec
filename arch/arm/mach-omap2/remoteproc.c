@@ -202,6 +202,9 @@ static struct rproc_mem_pool *omap_rproc_get_pool(const char *name)
 		pool->mem_size = len2;
 		pool->cur_base = paddr2;
 		pool->cur_size = len2;
+		pr_warn(">>> %s - NEW ALLOC: st_base==0x%x, st_size==0x%x, mem_base==0x%x, mem_size==0x%x\n",
+			name, paddr1, len1, paddr2, len2);
+	
 	}
 
 	return pool;
