@@ -347,6 +347,13 @@ static int rprm_gpio_request(struct rprm_elem *e, struct rprm_gpio *obj)
 	int ret;
 	struct rprm_gpio *gd;
 
+#ifdef CONFIG_RPMSG_JANKY_CAM_GPIO_HACK
+	if (obj->id == 38) {
+		obj->id = 83;
+	}
+#endif
+	printk(">> rpmsg GPIO request: %d\n", obj->id);
+
 	/* Create gpio depot */
 	gd = kmalloc(sizeof(*gd), GFP_KERNEL);
 	if (!gd)

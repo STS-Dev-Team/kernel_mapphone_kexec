@@ -53,3 +53,11 @@ config RPMSG_SERVER_SAMPLE
 	---help---
 	  This is just a sample server driver for the rpmsg bus.
 	  Say either Y or M. You know you want to.
+
+config RPMSG_JANKY_CAM_GPIO_HACK
+	boolean "Hack GPIO 38 request"
+	default n
+	depends on RPMSG
+	---help---
+	  Turn this on to intercept requests for GPIO 38 and turn them into GPIO 83
+
