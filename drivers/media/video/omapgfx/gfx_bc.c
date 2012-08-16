@@ -13,10 +13,10 @@
 #include <linux/delay.h>
 
 #define LINUX	/* Needed by IMG headers */
-#include "pvrmodule.h"
+//#include "pvrmodule.h"
 #include "img_defs.h"
 #include "servicesext.h"
-#include "kernelbuffer.h"
+#include "kerneldisplay.h"
 #include "gfx_bc.h"
 #include "v4gfx.h"
 

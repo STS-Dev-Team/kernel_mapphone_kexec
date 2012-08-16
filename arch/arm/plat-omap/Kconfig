@@ -293,6 +293,18 @@ config OMAP_PM
 	bool "OMAP PM layer implementation"
 endchoice
 
+config OMAP_ISS_MEM_SIZE
+	int "ISS preallocated contiguous buffer size (MB)"
+	range 0 32
+	depends on ARCH_OMAP4
+	default 32
+	help
+	  The amount of SDRAM to reserve at boot time for ISS buffer use.
+	  This memory will be used by omap4_camera and other drivers that need
+	  large continuous RAM area for video use.
+	  
+	  This is meant to be an alternative to use TILER DMM buffers.
+	
 endmenu
 
 endif

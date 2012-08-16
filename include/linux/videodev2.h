@@ -1026,6 +1026,8 @@ struct v4l2_ext_controls {
 #define V4L2_CTRL_CLASS_MPEG 0x00990000	/* MPEG-compression controls */
 #define V4L2_CTRL_CLASS_CAMERA 0x009a0000	/* Camera class controls */
 #define V4L2_CTRL_CLASS_FM_TX 0x009b0000	/* FM Modulator control class */
+#define V4L2_CTRL_CLASS_IMAGE_SOURCE 0x009c0000 /* Image source controls */
+#define V4L2_CTRL_CLASS_IMAGE_PROC 0x009d0000 /* Image processing controls */
 
 #define V4L2_CTRL_ID_MASK      	  (0x0fffffff)
 #define V4L2_CTRL_ID2CLASS(id)    ((id) & 0x0fff0000UL)
@@ -1039,6 +1041,7 @@ enum v4l2_ctrl_type {
 	V4L2_CTRL_TYPE_INTEGER64     = 5,
 	V4L2_CTRL_TYPE_CTRL_CLASS    = 6,
 	V4L2_CTRL_TYPE_STRING        = 7,
+	V4L2_CTRL_TYPE_INTEGER_MENU  = 8,
 };
 
 /*  Used in the VIDIOC_QUERYCTRL ioctl for querying controls */
@@ -1058,7 +1061,10 @@ struct v4l2_queryctrl {
 struct v4l2_querymenu {
 	__u32		id;
 	__u32		index;
-	__u8		name[32];	/* Whatever */
+	union {
+		__u8 name[32]; /* Whatever */
+		__s64 value;
+	};
 	__u32		reserved;
 };
 
@@ -1427,6 +1433,21 @@ enum v4l2_preemphasis {
 };
 #define V4L2_CID_TUNE_POWER_LEVEL		(V4L2_CID_FM_TX_CLASS_BASE + 113)
 #define V4L2_CID_TUNE_ANTENNA_CAPACITOR		(V4L2_CID_FM_TX_CLASS_BASE + 114)
+
+/* Image source controls */
+#define V4L2_CID_IMAGE_SOURCE_CLASS_BASE (V4L2_CTRL_CLASS_IMAGE_SOURCE | 0x900)
+#define V4L2_CID_IMAGE_SOURCE_CLASS (V4L2_CTRL_CLASS_IMAGE_SOURCE | 1)
+	
+#define V4L2_CID_VBLANK (V4L2_CID_IMAGE_SOURCE_CLASS_BASE + 1)
+#define V4L2_CID_HBLANK (V4L2_CID_IMAGE_SOURCE_CLASS_BASE + 2)
+#define V4L2_CID_ANALOGUE_GAIN (V4L2_CID_IMAGE_SOURCE_CLASS_BASE + 3)
+
+/* Image processing controls */
+#define V4L2_CID_IMAGE_PROC_CLASS_BASE (V4L2_CTRL_CLASS_IMAGE_PROC | 0x900)
+#define V4L2_CID_IMAGE_PROC_CLASS (V4L2_CTRL_CLASS_IMAGE_PROC | 1)
+
+#define V4L2_CID_LINK_FREQ (V4L2_CID_IMAGE_PROC_CLASS_BASE + 1)
+#define V4L2_CID_PIXEL_RATE (V4L2_CID_IMAGE_PROC_CLASS_BASE + 2)
 
 /*
  *	T U N I N G

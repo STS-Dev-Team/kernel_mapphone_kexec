@@ -391,6 +391,23 @@ config MACH_MAPPHONE
 	select OMAP_REBOOT_REASON
 	select OMAP_RAM_CONSOLE
 
+config MACH_MAPPHONE_SOLANA_CAMERA_SUPPORT
+	bool "MAPPHONE SOLANA board Camera support"
+	depends on MACH_MAPPHONE
+	select MEDIA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_DEV
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L_PLATFORM_DRIVERS
+	select VIDEO_OMAP4
+	select VIDEO_OV5640
+#	select VIDEO_OV8820
+#	select VIDEO_OV7741
+	help
+	  Enable Camera HW support for MAPPHONE SOLANA board
+	  This is for using the OMAP4 ISS CSI2A Camera sensor
+	  interface.
+
 config EMU_UART_DEBUG
 	bool "Setting MiniUSB port as UART3 to debug kernel"
 	default n

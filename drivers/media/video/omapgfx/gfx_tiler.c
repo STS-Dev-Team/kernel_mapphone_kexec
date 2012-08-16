@@ -15,10 +15,22 @@
 #include "v4gfx.h"
 #include "gfx_bc.h"
 
-#ifdef CONFIG_TILER_OMAP
+#ifdef CONFIG_TI_TILER
 #include <mach/tiler.h>
 #define TILER_ALLOCATE_V4L2
 #endif
+
+/* MESSY HACK -- COPIED THESE FROM drivers/media/video/tiler/tiler-geom.c */
+/* bits representing the same slot in DMM-TILER hw-block */
+#define SLOT_WIDTH_BITS		6
+#define SLOT_HEIGHT_BITS	6
+/* bits reserved to describe coordinates in DMM-TILER hw-block */
+#define CONT_WIDTH_BITS		14
+#define CONT_HEIGHT_BITS	13
+/* calculated constants */
+#define TILER_PAGE		(1 << (SLOT_WIDTH_BITS + SLOT_HEIGHT_BITS))
+#define TILER_WIDTH		(1 << (CONT_WIDTH_BITS - SLOT_WIDTH_BITS))
+#define TILER_HEIGHT		(1 << (CONT_HEIGHT_BITS - SLOT_HEIGHT_BITS))
 
 void v4gfx_tiler_buffer_free(struct v4gfx_device *vout, unsigned int count,
 			     unsigned int startindex)

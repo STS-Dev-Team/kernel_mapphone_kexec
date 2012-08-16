@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/irq.h>
+#include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/omap_v4l2_gfx.h>	/* private ioctls */
 

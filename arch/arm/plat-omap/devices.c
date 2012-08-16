@@ -379,6 +379,43 @@ u32 omap_ipu_get_mempool_size(enum omap_rproc_mempool_type type)
 EXPORT_SYMBOL(omap_ipu_get_mempool_size);
 #endif
 
+#if defined(CONFIG_OMAP_ISS_MEM_SIZE)
+	
+static phys_addr_t omap_cam_phys_mempool_base;
+	
+void __init omap_cam_reserve_sdram_memblock(void)
+{
+	phys_addr_t size = CONFIG_OMAP_ISS_MEM_SIZE * SZ_1M;
+	phys_addr_t paddr;
+	
+	if (!size)
+		return;
+	
+	paddr = memblock_alloc(size, SZ_1M);
+	if (!paddr) {
+		pr_err("%s: failed to reserve %x bytes\n",
+				__func__, size);
+		return;
+	}
+	memblock_free(paddr, size);
+	memblock_remove(paddr, size);
+	
+	omap_cam_phys_mempool_base = paddr;
+}
+	
+phys_addr_t omap_cam_get_mempool_base(void)
+{
+	return omap_cam_phys_mempool_base;
+}
+EXPORT_SYMBOL(omap_cam_get_mempool_base);
+	
+phys_addr_t omap_cam_get_mempool_size(void)
+{
+	return CONFIG_OMAP_ISS_MEM_SIZE * SZ_1M;
+}
+EXPORT_SYMBOL(omap_cam_get_mempool_size);
+#endif
+
 /*
  * This gets called after board-specific INIT_MACHINE, and initializes most
  * on-chip peripherals accessible on this board (except for few like USB):

@@ -3491,6 +3491,27 @@ static struct omap_hwmod_addr_space omap44xx_iss_addrs[] = {
 		.pa_end		= 0x520000ff,
 		.flags		= ADDR_TYPE_RT
 	},
+	{
+		.pa_start	= 0x52001000,
+		.pa_end		= 0x5200116f,
+		.flags		= ADDR_TYPE_RT
+	},
+	{
+		.pa_start	= 0x52001170,
+		.pa_end		= 0x5200118f,
+		.flags		= ADDR_TYPE_RT
+	},
+	{
+		.pa_start	= 0x52001400,
+		.pa_end		= 0x5200156f,
+		.flags		= ADDR_TYPE_RT
+	},
+	{
+		.pa_start	= 0x52001570,
+		.pa_end		= 0x5200158f,
+		.flags		= ADDR_TYPE_RT
+	},
+	{ }
 };
 
 /* l3_main_2 -> iss */
