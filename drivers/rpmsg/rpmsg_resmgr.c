@@ -300,13 +300,13 @@ int rprm_regulator_request(struct rprm_elem *e, struct rprm_regulator *obj)
 	ret = regulator_set_voltage(rd->reg_p, obj->min_uv, obj->max_uv);
 	if (ret) {
 		pr_err("%s: error setting %s voltage\n", __func__, reg_name);
-		goto error_reg;
+		// goto error_reg;
 	}
 
 	ret = regulator_enable(rd->reg_p);
 	if (ret) {
 		pr_err("%s: error enabling %s ldo\n", __func__, reg_name);
-		goto error_reg;
+		// goto error_reg;
 	}
 
 	e->handle = rd;
@@ -348,9 +348,12 @@ static int rprm_gpio_request(struct rprm_elem *e, struct rprm_gpio *obj)
 	struct rprm_gpio *gd;
 
 #ifdef CONFIG_RPMSG_JANKY_CAM_GPIO_HACK
-	if (obj->id == 38) {
-		obj->id = 83;
-	}
+#ifdef CONFIG_MACH_MAPPHONE_SOLANA
+	if (obj->id == 38)
+		obj->id = 47;
+	else if (obj->id == 39)
+		obj->id = 171;
+#endif
 #endif
 	printk(">> rpmsg GPIO request: %d\n", obj->id);
 
@@ -362,8 +365,12 @@ static int rprm_gpio_request(struct rprm_elem *e, struct rprm_gpio *obj)
 	ret = gpio_request(obj->id , "rpmsg_resmgr");
 	if (ret) {
 		pr_err("%s: error providing gpio %d\n", __func__, obj->id);
-		return ret;
+		//return ret;
+		ret = 0;
 	}
+#ifdef CONFIG_RPMSG_JANKY_CAM_GPIO_HACK
+	gpio_direction_output(obj->id, 1);
+#endif
 
 	e->handle = memcpy(gd, obj, sizeof(*obj));
 
