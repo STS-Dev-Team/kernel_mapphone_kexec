@@ -391,9 +391,13 @@ config MACH_MAPPHONE
 	select OMAP_REBOOT_REASON
 	select OMAP_RAM_CONSOLE
 
-config MACH_MAPPHONE_SOLANA_CAMERA_SUPPORT
-	bool "MAPPHONE SOLANA board Camera support"
+config MACH_MAPPHONE_SOLANA
+	bool "Droid 3 (XT862/XT860/XT883)"
 	depends on MACH_MAPPHONE
+
+config MACH_MAPPHONE_SOLANA_CAMERA_SUPPORT
+	bool "Enable Droid 3 ISS Camera support"
+	depends on MACH_MAPPHONE_SOLANA
 	select MEDIA_SUPPORT
 	select MEDIA_CONTROLLER
 	select VIDEO_DEV
@@ -407,6 +411,18 @@ config MACH_MAPPHONE_SOLANA_CAMERA_SUPPORT
 	  Enable Camera HW support for MAPPHONE SOLANA board
 	  This is for using the OMAP4 ISS CSI2A Camera sensor
 	  interface.
+
+config MACH_MAPPHONE_TARGA
+	bool "Droid Bionic (XT875)"
+	depends on MACH_MAPPHONE
+
+config MACH_MAPPHONE_SPYDER
+	bool "Droid RAZR (XT912/XT910)"
+	depends on MACH_MAPPHONE
+
+config MACH_MAPPHONE_MASERATI
+	bool "Droid 4 (XT892)"
+	depends on MACH_MAPPHONE
 
 config EMU_UART_DEBUG
 	bool "Setting MiniUSB port as UART3 to debug kernel"
