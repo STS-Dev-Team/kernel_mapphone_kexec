@@ -251,8 +251,8 @@ void omap_android_display_setup(struct omap_dss_board_info *dss,
 
 	struct omap_android_display_data mem = {
 		.bpp = 4,
-		.width = 960, // 1920
-		.height = 540, // 1080
+		.width = 1920,
+		.height = 1080,
 	};
 
 	if (!sgx || !sgx->configs)
