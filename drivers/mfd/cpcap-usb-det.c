@@ -1566,10 +1566,7 @@ int cpcap_accy_whisper(struct cpcap_device *cpcap,
 			cpcap_irq_mask(data->cpcap, CPCAP_IRQ_SE1);
 			data->whisper_auth = AUTH_IN_PROGRESS;
 			pdata->usb_mux->configure_switch_muxmode(OTG_DM_DP);
-			if (modem_is_ste_g4852())
-				pdata->usb_mux->configure_otg_muxmode(UART_3);
-			else
-				pdata->usb_mux->configure_otg_muxmode(UART_2);
+			pdata->usb_mux->configure_otg_muxmode(UART_2);
 		}
 
 		retval = cpcap_regacc_write(data->cpcap, CPCAP_REG_USBC2,
