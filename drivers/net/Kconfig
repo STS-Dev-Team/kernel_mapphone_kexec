@@ -3342,13 +3342,6 @@ config PPPOPNS
 	  networks. This driver handles PPTP data packets between a RAW socket
 	  and a PPP channel. It is fairly simple and easy to use.
 
-config PPPCTCN
-	tristate "PPP on C+W"
-	depends on PPP && INET
-	help
-	  Support C+W (CDMA2000+WLAN). This driver handles China Telecomm C+W
-	  data packets between a UDP socket and a PPP channel.
-
 config SLIP
 	tristate "SLIP (serial line) support"
 	---help---

@@ -25,8 +25,6 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/cpcap_audio_platform_data.h>
-#include <linux/gpio_mapping.h>
-#include <plat/gpio.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -52,8 +50,6 @@
 #define STM_STDAC_EN_ST_TEST1_PRE      0x2400
 #define STM_STDAC_EN_ST_TEST1_POST     0x0400
 
-int tcmd_mode;
-int gpio_clk_sel;
 /*power control flag for EMU anti-pop*/
 static int emu_analog_antipop;
 static struct cpcap_audio_state *cpcap_global_state_pointer;
@@ -89,12 +85,6 @@ static int snd_soc_get_cpcap_gpio(struct snd_kcontrol *,
 
 static int snd_soc_put_cpcap_gpio(struct snd_kcontrol *,
 				  struct snd_ctl_elem_value *);
-
-static int snd_soc_get_cpcap_sdac(struct snd_kcontrol *,
-				struct snd_ctl_elem_value *);
-
-static int snd_soc_put_cpcap_sdac(struct snd_kcontrol *,
-				struct snd_ctl_elem_value *);
 
 static int snd_soc_get_cpcap_dai_mode(struct snd_kcontrol *,
 				      struct snd_ctl_elem_value *);
@@ -179,15 +169,7 @@ static const char *cpcap_codec_op_modes_texts[] = {
 	"Voice Call Handset",
 	"Voice Call Headset",
 	"Voice Call Headset Mic",
-	"Voice Call BT",
-	"Reserved5",
-	"Reserved6",
-	"Reserved7",
-	"Reserved8",
-	"Reserved9",
-	"Reserved10",
-	"Audio Sample 1",
-	"Audio Sample 0"
+	"Voice Call BT"
 };
 
 static const struct soc_enum cpcap_codec_op_modes =
@@ -372,10 +354,6 @@ static const struct snd_kcontrol_new cpcap_snd_controls[] = {
 	SOC_SINGLE_BOOL_EXT("SecTer Mic Select",
 		CPCAP_REG_GPIO4, snd_soc_get_cpcap_gpio,
 		snd_soc_put_cpcap_gpio),
-	/* reset clock for 3g to 2g call switch */
-	SOC_SINGLE_BOOL_EXT("Reset SDAC",
-		CPCAP_AUDIO_REG_INDEX(CPCAP_REG_SDAC), snd_soc_get_cpcap_sdac,
-		snd_soc_put_cpcap_sdac),
 	SOC_ENUM_EXT("DAI Mode", cpcap_codec_op_modes,
 		snd_soc_get_cpcap_dai_mode, snd_soc_put_cpcap_dai_mode),
 	/* Enable EMU analog anti-pop for car dock */
@@ -722,7 +700,6 @@ static int cpcap_audio_reg_write(struct snd_soc_codec *codec,
 
 static void cpcap_audio_register_dump(struct snd_soc_codec *codec)
 {
-#ifdef CPCAP_AUDIO_DEBUG
 	unsigned short *cache;
 	int i = 0;
 
@@ -734,7 +711,7 @@ static void cpcap_audio_register_dump(struct snd_soc_codec *codec)
 
 	for (i = 0; i < CPCAP_AUDIO_REG_NUM; i++)
 		cpcap_audio_reg_read(codec, i);
-	CPCAP_AUDIO_DEBUG_LOG("\t0x200 = %x\n\t0x201 = %x\n\t0x202 = %x\n"
+	dev_dbg(codec->dev, "\t0x200 = %x\n\t0x201 = %x\n\t0x202 = %x\n"
 			   "\t0x203 = %x\n\t0x204 = %x\n\t0x205 = %x\n"
 			   "\t0x206 = %x\n\t0x207 = %x\n\t0x208 = %x\n"
 			   "\t0x209 = %x\n\t0x20A = %x\n\t0x20B = %x\n"
@@ -742,8 +719,6 @@ static void cpcap_audio_register_dump(struct snd_soc_codec *codec)
 		cache[0], cache[1], cache[2], cache[3], cache[4],
 		cache[5], cache[6], cache[7], cache[8], cache[9],
 		cache[10], cache[11], cache[12], cache[13]);
-#endif
-	return;
 }
 
 static int snd_soc_put_cpcap_switch(struct snd_kcontrol *kcontrol,
@@ -1185,7 +1160,6 @@ static int snd_soc_put_cpcap_mixer(struct snd_kcontrol *kcontrol,
 					STM_STDAC_EN_TEST_POST, 0xFFFF);
 	}
 
-	cpcap_audio_register_dump(codec);
 	return err;
 }
 
@@ -1266,9 +1240,6 @@ static int snd_soc_put_cpcap_gpio(struct snd_kcontrol *kcontrol,
 	struct cpcap_audio_state *state = snd_soc_codec_get_drvdata(codec);
 	struct cpcap_device *cpcap = state->cpcap;
 	unsigned short *cache = codec->reg_cache;
-	struct platform_device *pdev = container_of(codec->dev,
-				struct platform_device, dev);
-	struct cpcap_audio_pdata *pdata = pdev->dev.platform_data;
 
 	CPCAP_AUDIO_DEBUG_LOG("%s: %s - %ld\n", __func__,
 		kcontrol->id.name, ucontrol->value.integer.value[0]);
@@ -1341,46 +1312,6 @@ static int snd_soc_put_cpcap_gpio(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int snd_soc_get_cpcap_sdac(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
-{
-	return 0;
-}
-
-static int snd_soc_put_cpcap_sdac(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
-{
-	int err;
-	unsigned short value = 0;
-	unsigned int reg = CPCAP_AUDIO_REG_INDEX(CPCAP_REG_SDAC);
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	unsigned short *cache = codec->reg_cache;
-
-	CPCAP_AUDIO_DEBUG_LOG("snd_soc_put_cpcap_sdac be called\n");
-
-	value = cache[reg] | CPCAP_BIT_DF_RESET_ST_DAC |
-			 CPCAP_BIT_ST_CLOCK_TREE_RESET;
-
-	err = cpcap_audio_reg_write(codec, reg, value);
-	if (err) {
-		CPCAP_AUDIO_DEBUG_LOG("fail to reset SDAC\n");
-		return err;
-	}
-
-	/* Wait for clock tree reset to complete */
-	mdelay(CLOCK_TREE_RESET_TIME);
-	value = cpcap_audio_reg_read(codec, reg);
-	if (value &
-		(CPCAP_BIT_DF_RESET_ST_DAC | CPCAP_BIT_ST_CLOCK_TREE_RESET)) {
-		printk(KERN_ERR "%s: CPCAP_REG_SDAC = %u! "
-		"DF_RESET and CLOCK_TREE_RESET should have "
-			"self-cleared\n", __func__, value);
-	}
-
-	CPCAP_AUDIO_DEBUG_LOG("snd_soc_put_cpcap_sdac return\n");
-	return 0;
-}
-
 static int snd_soc_get_cpcap_dai_mode(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
@@ -1430,12 +1361,6 @@ static int snd_soc_put_cpcap_dai_mode(struct snd_kcontrol *kcontrol,
 			return err;
 		reg = CPCAP_AUDIO_REG_INDEX(CPCAP_REG_CC);
 		break;
-	case 11: /* tcmd audio sample 1*/
-			tcmd_mode = 1;
-			return 0;
-	case 12:
-			tcmd_mode = 0;
-			return 0;
 	default:
 		return -EINVAL; /* invalid mode */
 	}
@@ -1885,9 +1810,6 @@ static void cpcap_voice_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_codec *codec = dai->codec;
 	struct cpcap_audio_state *state = snd_soc_codec_get_drvdata(codec);
 	unsigned short *cache = (unsigned short *)codec->reg_cache;
-	struct platform_device *pdev = container_of(codec->dev,
-			struct platform_device, dev);
-	struct cpcap_audio_pdata *pdata = pdev->dev.platform_data;
 
 	CPCAP_AUDIO_DEBUG_LOG("%s: Entered, %d codec streams\n",
 			      __func__, state->codec_strm_cnt);
@@ -1914,14 +1836,6 @@ static void cpcap_voice_shutdown(struct snd_pcm_substream *substream,
 				CPCAP_BIT_MIC2_PGA_EN | CPCAP_BIT_MIC2_MUX));
 		cpcap_audio_reg_write(codec,
 				CPCAP_AUDIO_REG_INDEX(CPCAP_REG_RXCOA), 0);
-
-		if (pdata->voice_type == VOICE_TYPE_STE_PNX6718) {
-				cpcap_audio_reg_write(codec,
-				CPCAP_AUDIO_REG_INDEX(CPCAP_REG_SDACDI),
-				cache[CPCAP_AUDIO_REG_INDEX(CPCAP_REG_SDACDI)]|
-				CPCAP_BIT_DIG_AUD_IN_ST_DAC);
-		}
-
 		if (state->stdac_strm_cnt == 0) {
 			/* BT streams operate with CPCAP in standby mode, so
 			 * don't put CPCAP in standby again when we close
@@ -2249,18 +2163,12 @@ static int cpcap_incall_hw_params(struct snd_pcm_substream *substream,
 				ret |= cpcap_audio_reg_write(codec, 1, 0x8120);
 		} else if (pdata->voice_type == VOICE_TYPE_QC) {
 			/* MDM6600 */
-			if (gpio_clk_sel > 0)
-				gpio_direction_output(gpio_clk_sel, 1);
 			ret = cpcap_audio_reg_write(codec, 2, 0xAE02);
 			if (rate == 16000) {
 				ret |= cpcap_audio_reg_write(codec, 1, 0x6720);
 			} else {
 				ret |= cpcap_audio_reg_write(codec, 1, 0x6120);
 			}
-		} else if (pdata->voice_type == VOICE_TYPE_STE_PNX6718) {
-			ret = cpcap_audio_reg_write(codec, 2, 0x2205);
-			ret |= cpcap_audio_reg_write(codec, 5, 0x406);
-			ret |= cpcap_audio_reg_write(codec, 1, 0x817c);
 		} else {
 			ret = -EIO;
 			printk(KERN_ERR "%s: voice_type = %u, not valid modem",
@@ -2276,26 +2184,6 @@ static int cpcap_incall_hw_params(struct snd_pcm_substream *substream,
 			printk(KERN_ERR "%s: CPCAP_REG_CC = %u! "
 				"DF_RESET and CLOCK_TREE_RESET should have "
 				"self-cleared\n", __func__, value);
-		}
-
-		if (pdata->voice_type == VOICE_TYPE_STE_PNX6718) {
-			ret = cpcap_audio_reg_write(codec, 4, 0xc9);
-			ret |= cpcap_audio_reg_write(codec, 3, 0x306);
-			if (ret)
-				return ret;
-			/* Wait for clock tree reset to complete */
-			mdelay(CLOCK_TREE_RESET_TIME);
-			value = cpcap_audio_reg_read(codec, 3);
-			if (value & (CPCAP_BIT_DF_RESET_ST_DAC |
-				CPCAP_BIT_ST_CLOCK_TREE_RESET)) {
-				printk(KERN_ERR "%s: CPCAP_REG_SDAC = %u! "
-				"DF_RESET and CLOCK_TREE_RESET should have "
-				"self-cleared\n", __func__, value);
-			}
-
-			cpcap_audio_register_dump(codec);
-			/* Dinara code change end */
-			return 0;
 		}
 	}
 	if (substream->stream) { /* up link */
@@ -2317,75 +2205,6 @@ static int cpcap_incall_hw_params(struct snd_pcm_substream *substream,
 
 	return 0;
 }
-
-static int cpcap_incall_second_hw_params(struct snd_pcm_substream *substream,
-		struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
-{
-	int ret;
-	unsigned short value;
-	unsigned short *cache;
-	int rate = params_rate(params);
-	struct snd_soc_codec *codec = dai->codec;
-	struct cpcap_audio_state *state = snd_soc_codec_get_drvdata(codec);
-
-	CPCAP_AUDIO_DEBUG_LOG("%s entered, %d codec streams\n",
-			      __func__, state->codec_strm_cnt);
-
-	cache = (unsigned short *)codec->reg_cache;
-	if (state->codec_strm_cnt == 1) {
-		struct platform_device *pdev = container_of(codec->dev,
-					struct platform_device, dev);
-		struct cpcap_audio_pdata *pdata = pdev->dev.platform_data;
-
-		if (gpio_clk_sel > 0)
-			gpio_direction_output(gpio_clk_sel, 0);
-		ret = cpcap_audio_reg_write(codec,
-				CPCAP_AUDIO_REG_INDEX(CPCAP_REG_CC), 0x8120);
-		ret |= cpcap_audio_reg_write(codec,
-				CPCAP_AUDIO_REG_INDEX(CPCAP_REG_CDI), 0xAC41);
-
-		if (ret)
-			return ret;
-		/* Wait for clock tree reset to complete */
-		mdelay(CLOCK_TREE_RESET_TIME);
-		value = cpcap_audio_reg_read(codec, 1);
-		if (value & (CPCAP_BIT_DF_RESET |
-			CPCAP_BIT_CDC_CLOCK_TREE_RESET)) {
-			printk(KERN_ERR "%s: CPCAP_REG_CC = %u! "
-				"DF_RESET and CLOCK_TREE_RESET should have "
-				"self-cleared\n", __func__, value);
-		}
-	}
-	if (substream->stream) { /* up link */
-		if (rate == 16000) {
-			ret = cpcap_audio_reg_write(codec, 1,
-				cache[1] | CPCAP_BIT_AUDIHPF_0);
-		} else {
-			ret = cpcap_audio_reg_write(codec, 1,
-				cache[1] | CPCAP_BIT_AUDIHPF_1 |
-					CPCAP_BIT_AUDIHPF_0);
-		}
-		ret |= cpcap_audio_reg_write(codec, 5,
-				cache[5] | CPCAP_BIT_MB_ON1L |
-				CPCAP_BIT_MB_ON1R);
-		if (ret)
-			return ret;
-	} else { /* down link */
-		if (rate == 16000) {
-			ret  = cpcap_audio_reg_write(codec, 1,
-				cache[1] | CPCAP_BIT_AUDOHPF_0);
-		} else {
-			ret = cpcap_audio_reg_write(codec, 1,
-				cache[1] | CPCAP_BIT_AUDOHPF_1 |
-					CPCAP_BIT_AUDOHPF_0);
-		}
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
 
 static int cpcap_btcall_hw_params(struct snd_pcm_substream *substream,
 		struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
@@ -2410,12 +2229,6 @@ static int cpcap_btcall_hw_params(struct snd_pcm_substream *substream,
 			ret |= cpcap_audio_reg_write(codec, 1, 0x8000);
 		} else if (pdata->voice_type == VOICE_TYPE_QC) {
 			/* MDM6600 */
-			if (gpio_clk_sel > 0)
-				gpio_direction_output(gpio_clk_sel, 1);
-			ret = cpcap_audio_reg_write(codec, 2, 0xAA40);
-			ret |= cpcap_audio_reg_write(codec, 1, 0x6000);
-		} else if (pdata->voice_type == VOICE_TYPE_STE_PNX6718) {
-			/* STE_PNX6718 */
 			ret = cpcap_audio_reg_write(codec, 2, 0xAA40);
 			ret |= cpcap_audio_reg_write(codec, 1, 0x6000);
 		} else {
@@ -2430,45 +2243,6 @@ static int cpcap_btcall_hw_params(struct snd_pcm_substream *substream,
 		value = cpcap_audio_reg_read(codec, 1);
 		if (value & (CPCAP_BIT_DF_RESET |
 			     CPCAP_BIT_CDC_CLOCK_TREE_RESET)) {
-			printk(KERN_ERR "%s: CPCAP_REG_CC = %u! "
-				"DF_RESET and CLOCK_TREE_RESET should have "
-				"self-cleared\n", __func__, value);
-		}
-		/* Clocks can still be generated in low power mode */
-		if (emu_analog_antipop == 0)
-			vaudio_mode(REGULATOR_MODE_STANDBY);
-	}
-
-	return 0;
-}
-
-static int cpcap_btcall_second_hw_params(struct snd_pcm_substream *substream,
-		struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
-{
-	int ret;
-	unsigned short value;
-	unsigned short *cache;
-	struct snd_soc_codec *codec = dai->codec;
-	struct cpcap_audio_state *state = snd_soc_codec_get_drvdata(codec);
-
-	CPCAP_AUDIO_DEBUG_LOG("%s entered, %d codec streams\n",
-				__func__, state->codec_strm_cnt);
-
-	cache = (unsigned short *)codec->reg_cache;
-	if (state->codec_strm_cnt == 1) {
-		if (gpio_clk_sel > 0)
-			gpio_direction_output(gpio_clk_sel, 0);
-		ret = cpcap_audio_reg_write(codec,
-				CPCAP_AUDIO_REG_INDEX(CPCAP_REG_CDI), 0xAC41);
-		ret |= cpcap_audio_reg_write(codec,
-				CPCAP_AUDIO_REG_INDEX(CPCAP_REG_CC), 0x8000);
-		if (ret)
-			return ret;
-		/* Wait for clock tree reset to complete */
-		mdelay(CLOCK_TREE_RESET_TIME);
-		value = cpcap_audio_reg_read(codec, 1);
-		if (value & (CPCAP_BIT_DF_RESET |
-			CPCAP_BIT_CDC_CLOCK_TREE_RESET)) {
 			printk(KERN_ERR "%s: CPCAP_REG_CC = %u! "
 				"DF_RESET and CLOCK_TREE_RESET should have "
 				"self-cleared\n", __func__, value);
@@ -2572,23 +2346,10 @@ static struct snd_soc_dai_ops cpcap_dai_incall_ops = {
 	.digital_mute   = cpcap_voice_mute,
 };
 
-static struct snd_soc_dai_ops cpcap_dai_incall_second_ops = {
-	.startup        = cpcap_voice_startup,
-	.shutdown       = cpcap_voice_shutdown,
-	.hw_params      = cpcap_incall_second_hw_params,
-	.digital_mute   = cpcap_voice_mute,
-};
-
 static struct snd_soc_dai_ops cpcap_dai_btcall_ops = {
 	.startup        = cpcap_voice_startup,
 	.shutdown       = cpcap_voice_shutdown,
 	.hw_params      = cpcap_btcall_hw_params,
-};
-
-static struct snd_soc_dai_ops cpcap_dai_btcall_second_ops = {
-	.startup        = cpcap_voice_startup,
-	.shutdown       = cpcap_voice_shutdown,
-	.hw_params      = cpcap_btcall_second_hw_params,
 };
 
 static struct snd_soc_dai_ops cpcap_dai_btvoice_ops = {
@@ -2647,22 +2408,6 @@ struct snd_soc_dai_driver cpcap_dai[] = {
 	.ops = &cpcap_dai_incall_ops,
 },
 {
-	.name = "cpcap in-call second",
-	.playback = {
-		.stream_name = "InCall DL",
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
-	.capture = {
-		.stream_name = "Capture",
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
-	.ops = &cpcap_dai_incall_second_ops,
-},
-{
 	.name = "cpcap bt-call",
 	.playback = {
 		.stream_name = "BTCall DL",
@@ -2677,22 +2422,6 @@ struct snd_soc_dai_driver cpcap_dai[] = {
 		.rates = SNDRV_PCM_RATE_8000,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
 	.ops = &cpcap_dai_btcall_ops,
-},
-{
-	.name = "cpcap bt-call second",
-	.playback = {
-		.stream_name = "BTCall DL",
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_8000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
-	.capture = {
-		.stream_name = "BTCall UL",
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_8000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
-	.ops = &cpcap_dai_btcall_second_ops,
 },
 {
 	.name = "cpcap bt",
@@ -2777,12 +2506,6 @@ static int cpcap_probe(struct snd_soc_codec *codec)
 	snd_soc_add_controls(codec, cpcap_snd_controls,
 			     ARRAY_SIZE(cpcap_snd_controls));
 	cpcap_add_widgets(codec);
-
-	gpio_clk_sel = get_gpio_by_name("clk_sel");
-	if (gpio_clk_sel < 0)
-		CPCAP_AUDIO_DEBUG_LOG("Cannot retrieve clk_sel GPIO\n");
-	else
-		CPCAP_AUDIO_DEBUG_LOG("clk_sel = gpio %d\n", gpio_clk_sel);
 
 	return 0;
 }

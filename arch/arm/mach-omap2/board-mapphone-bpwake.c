@@ -41,124 +41,28 @@ static irqreturn_t mapphone_bpwake_irqhandler(int irq, void *unused)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t mapphone_stewake_irqhandler(int irq, void *unused)
-{
-	int up = MAPPHONE_AP_UART;
-
-	/*
-	 *For G4852,we use uart1 for ipc transfer,uart2 for bplog.
-	 */
-	if (modem_is_ste_g4852())
-		up = 1;
-#ifdef CONFIG_PM
-	omap_uart_block_sleep(up);
-#endif
-	/*
-	 * uart_block_sleep keeps uart clock active for 500 ms,
-	 * prevent suspend for 1 sec to be safe
-	 */
-	wake_lock_timeout(&baseband_wakeup_wakelock, HZ);
-	omap_uart_start_ste_ipc_tx(up);
-
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t mapphone_stelogwake_irqhandler(int irq, void *unused)
-{
-	if (modem_is_ste_g4852() && get_ste_bplog_mode())
-#ifdef CONFIG_PM
-		omap_uart_block_sleep(2);
-#endif
-	/*
-	 * uart_block_sleep keeps uart clock active for 500 ms,
-	 * prevent suspend for 1 sec to be safe
-	 */
-	wake_lock_timeout(&baseband_wakeup_wakelock, HZ);
-	omap_uart_trace_set_ap_ready();
-	return IRQ_HANDLED;
-}
-
 static int mapphone_bpwake_probe(struct platform_device *pdev)
 {
 	int rc;
+
 	int apwake_trigger_gpio = *(int *)(pdev->dev.platform_data);
+
+	gpio_request(apwake_trigger_gpio, "BP -> AP IPC trigger");
+	gpio_direction_input(apwake_trigger_gpio);
 
 	wake_lock_init(&baseband_wakeup_wakelock, WAKE_LOCK_SUSPEND, "bpwake");
 
-	if (apwake_trigger_gpio >= 0) {
-
-		gpio_request(apwake_trigger_gpio, "BP -> AP IPC trigger");
-		gpio_direction_input(apwake_trigger_gpio);
-
-		rc = request_irq(gpio_to_irq(apwake_trigger_gpio),
-				mapphone_bpwake_irqhandler,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-				"Remote Wakeup", NULL);
-		if (rc) {
-			wake_lock_destroy(&baseband_wakeup_wakelock);
-			printk(KERN_ERR
-			    "Failed requesting APWAKE_TRIGGER irq (%d)\n", rc);
-			return rc;
-		}
-		enable_irq_wake(gpio_to_irq(apwake_trigger_gpio));
-
+	rc = request_irq(gpio_to_irq(apwake_trigger_gpio),
+			 mapphone_bpwake_irqhandler,
+			 IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+			 "Remote Wakeup", NULL);
+	if (rc) {
+		wake_lock_destroy(&baseband_wakeup_wakelock);
+		printk(KERN_ERR
+		       "Failed requesting APWAKE_TRIGGER irq (%d)\n", rc);
+		return rc;
 	}
-
-	apwake_trigger_gpio = get_gpio_by_name("ste_wakeup_ap");
-	if (apwake_trigger_gpio >= 0) {
-
-		gpio_request(apwake_trigger_gpio, "STE -> AP IPC trigger");
-		gpio_direction_input(apwake_trigger_gpio);
-
-		rc = request_irq(gpio_to_irq(apwake_trigger_gpio),
-				mapphone_stewake_irqhandler,
-				IRQF_TRIGGER_RISING,
-				"STE Remote Wakeup", NULL);
-		if (rc) {
-			wake_lock_destroy(&baseband_wakeup_wakelock);
-			printk(KERN_ERR
-			    "Failed requesting APWAKE_TRIGGER irq (%d)\n", rc);
-			return rc;
-		}
-		enable_irq_wake(gpio_to_irq(apwake_trigger_gpio));
-
-	}
-	return 0;
-}
-
-int mapphone_ste_log_wake_enable(void)
-{
-	int rc;
-	int ste_log_wakeup_ap_gpio;
-
-	ste_log_wakeup_ap_gpio = get_gpio_by_name("gsm_status1");
-	if (ste_log_wakeup_ap_gpio >= 0) {
-		gpio_request(ste_log_wakeup_ap_gpio, "STE -> AP trace trigger");
-		gpio_direction_input(ste_log_wakeup_ap_gpio);
-
-		rc = request_irq(gpio_to_irq(ste_log_wakeup_ap_gpio),
-				 mapphone_stelogwake_irqhandler,
-				 IRQF_TRIGGER_FALLING,
-				 "STE Trace Remote Wakeup", NULL);
-		if (rc) {
-			printk(KERN_ERR
-			       "Failed requesting STE -> AP trace irq (%d)\n",
-				 rc);
-			return rc;
-		}
-		enable_irq_wake(gpio_to_irq(ste_log_wakeup_ap_gpio));
-	}
-	return 0;
-}
-
-int mapphone_ste_log_wake_disable(void)
-{
-	int ste_log_wakeup_ap_gpio;
-
-	ste_log_wakeup_ap_gpio = get_gpio_by_name("gsm_status1");
-	if (ste_log_wakeup_ap_gpio >= 0)
-		free_irq(gpio_to_irq(ste_log_wakeup_ap_gpio), NULL);
-	gpio_free(ste_log_wakeup_ap_gpio);
+	enable_irq_wake(gpio_to_irq(apwake_trigger_gpio));
 	return 0;
 }
 
@@ -168,14 +72,8 @@ static int mapphone_bpwake_remove(struct platform_device *pdev)
 
 	wake_lock_destroy(&baseband_wakeup_wakelock);
 
-	if (apwake_trigger_gpio >= 0)
-		free_irq(gpio_to_irq(apwake_trigger_gpio), NULL);
-
-	apwake_trigger_gpio = get_gpio_by_name("ste_wakeup_ap");
-	if (apwake_trigger_gpio >= 0)
-		free_irq(gpio_to_irq(apwake_trigger_gpio), NULL);
-
-        gpio_free(apwake_trigger_gpio);
+	free_irq(gpio_to_irq(apwake_trigger_gpio), NULL);
+	gpio_free(apwake_trigger_gpio);
 	return 0;
 }
 

@@ -676,7 +676,6 @@ enum cpcap_support_status {
 
 enum cpcap_usb_otg_muxmode {
 	USB_OTG,
-	UART_3,
 	UART_2,
 	SAFE_MODE,
 };
@@ -1035,6 +1034,5 @@ int cpcap_direct_misc_write(unsigned short reg, unsigned short value,\
 int cpcap_device_register(struct platform_device *pdev);
 int cpcap_device_unregister(struct platform_device *pdev);
 
-extern int modem_is_ste_g4852(void);
 #endif /* __KERNEL__ */
 #endif /* _LINUX_SPI_CPCAP_H */

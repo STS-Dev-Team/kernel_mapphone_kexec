@@ -678,12 +678,8 @@ config VIB_OMAP_PWM
 	default n
 
 config VIB_PWM
-	bool "PWM Vibrator"
-	default n
-
-config NETMETER
-	tristate "netmeter driver used to moniter ip data traffic"
-	default n
+        bool "PWM Vibrator"
+        default n
 
 
 source "drivers/misc/c2port/Kconfig"

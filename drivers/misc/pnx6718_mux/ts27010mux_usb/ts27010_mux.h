@@ -49,11 +49,8 @@ extern struct tty_struct *ts27010mux_usb_tty;
 #ifdef QUEUE_SELF
 extern struct workqueue_struct *g_mux_usb_queue;
 #endif
-#ifdef DUMP_FRAME
 extern int g_mux_usb_dump_frame;
-extern int g_mux_usb_dump_seq;
 extern int g_mux_usb_dump_user_data;
-#endif
 
 #ifdef MUX_USB_LOGGER
 extern struct ts27010_mux_logger *g_mux_usb_logger;
@@ -107,9 +104,8 @@ void ts27010_mux_usb_mux_hold(void);
 void ts27010_mux_usb_mux_resume(void);
 
 void ts27010_mux_usb_recv(
-	spinlock_t *recv_lock, struct ts27010_ringbuf *rbuf);
+	/* spinlock_t* recv_lock, */ struct ts27010_ringbuf *rbuf);
 void ts27010_mux_usb_line_close(int line);
-int ts27010_mux_usb_dlci_is_connected(u8 dlci);
 
 #ifdef MUX_USB_UT
 void test_ts27010_usb(void);
@@ -118,7 +114,6 @@ void test_ts27010_usb(void);
 /* in ts27010_ldisc.c */
 int ts27010_ldisc_usb_init(void);
 int ts27010_ldisc_usb_send(struct tty_struct *tty, u8 *data, int len);
-int ts27010_ldisc_usb_is_hold(void);
 void ts27010_ldisc_usb_remove(void);
 
 /* in ts27010_tty.c */
@@ -126,7 +121,6 @@ int ts27010_tty_usb_init(void);
 int ts27010_tty_usb_send(int line, u8 *data, int len);
 int ts27010_tty_usb_send_rbuf(int line, struct ts27010_ringbuf *rbuf,
 			  int data_idx, int len);
-void ts27010_tty_usb_reset_tty(int line);
 void ts27010_tty_usb_remove(void);
 int ts27010_tty_usb_open(void);
 void ts27010_tty_usb_close(void);

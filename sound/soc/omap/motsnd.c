@@ -606,30 +606,6 @@ static struct snd_soc_dai_link motsnd_dai[] = {
 	.ops = &motsnd_bpvoice_ops,
 	.ignore_suspend = 1,
 },
-#if 0
-{
-	.name = "VoiceCall Second",
-	.stream_name = "Modem-Codec-Second",
-	.cpu_dai_name = "MODEM",
-	.codec_dai_name = "cpcap in-call second",
-	.platform_name = "omap-pcm-audio",
-	.codec_name = "cpcap_audio",
-	.init = motsnd_cpcap_voice_init,
-	.ops = &motsnd_incall_ops,
-	.ignore_suspend = 1,
-},
-{
-	.name = "BTCall Second",
-	.stream_name = "Modem-BT-Second",
-	.cpu_dai_name = "MODEM",
-	.codec_dai_name = "cpcap bt-call second",
-	.platform_name = "omap-pcm-audio",
-	.codec_name = "cpcap_audio",
-	.init = motsnd_cpcap_voice_init,
-	.ops = &motsnd_incall_ops,
-	.ignore_suspend = 1,
-},
-#endif
 #ifdef ABE_BYPASS
 {
 	.name = "Multimedia LP",

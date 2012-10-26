@@ -15,7 +15,6 @@
 #include <linux/serial_reg.h>
 #include <linux/wakelock.h>
 #include <plat/omap-serial.h>
-#include "board-mapphone.h"
 
 #include <linux/of.h>
 #include <mach/ctrl_module_pad_core_44xx.h>
@@ -23,38 +22,17 @@
 #include "mux.h"
 
 static int wake_gpio_strobe = -1;
-static int ap_wakeup_ste_gpio = -1;
-static int ste_wakeup_ap_gpio = -1;
 static struct wake_lock uart_lock;
-static int ste_tat_mode;
-static int ste_bplog_mode;
-static int ste_uart_id;
-static int wk_pulse_width = 10;
-static struct timer_list mapphone_wakeup_ste_timer;
-static int mapphone_wakeup_ste_timer_active;
-static int wakeup_ste_retry_count;
 
 static void mapphone_uart_hold_wakelock(void *up, int flag);
 static void mapphone_uart_probe(struct uart_omap_port *up);
 static void mapphone_uart_remove(struct uart_omap_port *up);
 static void mapphone_uart_wake_peer(struct uart_port *up);
-static void mapphone_ste_uart_probe(struct uart_omap_port *up);
-static void mapphone_ste_uart_remove(struct uart_omap_port *up);
-static void mapphone_ste_uart_wake_peer(struct uart_port *up);
-static int  mapphone_ste_uart_check_peer(struct uart_omap_port *up);
-static void mapphone_ste_uart_update_handshake(struct uart_omap_port *up,
-					   int status);
 
-extern void omap_uart_start_ipc_tx(int index);
-extern void omap_uart_block_sleep(int num);
-extern bool omap_uart_is_suspended(int index);
-extern int omap_uart_rts_status(int index);
 /* Give 1s wakelock time for each port */
 static u8 wakelock_length[OMAP_MAX_HSUART_PORTS] = {2, 2, 2, 2};
 
 #define MAX_UART_MUX_ALTERNATIVES 2
-#define HANDSHAKE_WAKEUP_WARN_LIMIT             10
-#define HANDSHAKE_WAKEUP_BP_TIMER_EXPIRES       (HZ/10)
 
 static struct uart_mux_alternatives {
 	u16	padconf;
@@ -287,37 +265,6 @@ static void __init mapphone_serial_dt_ctsrts(int id, struct device_node *node)
 	return;
 }
 
-static void __init mapphone_serial_dt_steport(int id, struct device_node *node)
-{
-	u8 is_ste;
-	const void *prop = of_get_property(node, "ste_port", NULL);
-
-	if (!prop)
-		return;
-
-	is_ste = *((u8 *)prop);
-
-	if (is_ste) {
-		omap_serial_platform_data[id].board_uart_probe
-			= mapphone_ste_uart_probe;
-		omap_serial_platform_data[id].board_uart_remove
-			= mapphone_ste_uart_remove;
-		omap_serial_platform_data[id].wake_peer
-			= mapphone_ste_uart_wake_peer;
-		omap_serial_platform_data[id].board_check_peer
-			= mapphone_ste_uart_check_peer;
-		omap_serial_platform_data[id].board_update_handshake
-			= mapphone_ste_uart_update_handshake;
-		omap_serial_platform_data[id].is_clear_fifo
-			= 0;
-		omap_serial_platform_data[id].rts_mux_driver_control
-			= 1,
-		ste_uart_id = id;
-	}
-
-	return;
-}
-
 static struct omap_device_pad mapphone_uart1_pads[] __initdata = {
 	{
 		.name	= "uart1_cts.uart1_cts",
@@ -414,7 +361,6 @@ void __init mapphone_serial_init(void)
 		mapphone_serial_dt_pins(i, node);
 		mapphone_serial_dt_wakelock(i, node);
 		mapphone_serial_dt_ctsrts(i, node);
-		mapphone_serial_dt_steport(i, node);
 
 		of_node_put(node);
 	}
@@ -471,173 +417,4 @@ static void mapphone_uart_wake_peer(struct uart_port *up)
 		gpio_direction_output(wake_gpio_strobe, 0);
 		udelay(5);
 	}
-}
-
-static void mapphone_wakeup_ste_timeout_handler(unsigned long unused)
-{
-	if (ste_tat_mode)
-		return;
-
-	if (!gpio_get_value(ste_wakeup_ap_gpio)) {
-		printk(KERN_INFO "STE still not ready\n");
-		gpio_direction_output(ap_wakeup_ste_gpio, 0);
-		udelay(wk_pulse_width);
-		gpio_direction_output(ap_wakeup_ste_gpio, 1);
-		udelay(10);
-		mod_timer(&mapphone_wakeup_ste_timer,
-			jiffies + HANDSHAKE_WAKEUP_BP_TIMER_EXPIRES);
-		omap_uart_block_sleep(ste_uart_id);
-		wakeup_ste_retry_count++;
-		if (wakeup_ste_retry_count > HANDSHAKE_WAKEUP_WARN_LIMIT) {
-			printk(KERN_ERR "Can not wakeup STE."
-				"wakeup_bp_retry_count=%d\n",
-				wakeup_ste_retry_count);
-		}
-	} else {
-		if (!omap_uart_is_suspended(ste_uart_id))
-			omap_uart_start_ipc_tx(ste_uart_id);
-	}
-}
-
-static void mapphone_ste_uart_probe(struct uart_omap_port *up)
-{
-	ap_wakeup_ste_gpio = get_gpio_by_name("ap_wakeup_ste");
-	if (ap_wakeup_ste_gpio >= 0) {
-		if (gpio_request(ap_wakeup_ste_gpio,
-				"AP wakeup STE")) {
-			printk(KERN_ERR "Error requesting GPIO %d\n",
-				ap_wakeup_ste_gpio);
-		} else {
-			gpio_direction_output(ap_wakeup_ste_gpio, 1);
-		}
-	}
-
-	ste_wakeup_ap_gpio = get_gpio_by_name("ste_wakeup_ap");
-	if (ste_wakeup_ap_gpio >= 0) {
-		if (gpio_request(ste_wakeup_ap_gpio,
-				"STE wakeup AP")) {
-			printk(KERN_ERR "Error requesting GPIO %d\n",
-				ste_wakeup_ap_gpio);
-		} else {
-			gpio_direction_input(ste_wakeup_ap_gpio);
-		}
-	}
-
-	init_timer(&mapphone_wakeup_ste_timer);
-	mapphone_wakeup_ste_timer.function
-		= mapphone_wakeup_ste_timeout_handler;
-	if (modem_is_ste_g4852())
-		wk_pulse_width = 40;
-}
-
-static void mapphone_ste_uart_remove(struct uart_omap_port *up)
-{
-	if (ap_wakeup_ste_gpio >= 0)
-		gpio_free(ap_wakeup_ste_gpio);
-
-	if (ste_wakeup_ap_gpio >= 0)
-		gpio_free(ste_wakeup_ap_gpio);
-}
-
-static void mapphone_ste_uart_wake_peer(struct uart_port *up)
-{
-	if (ste_tat_mode)
-		return;
-
-	/*
-	 * First generate a rising edge regardless the state of ap_wakeup_ste.
-	 */
-	if (ap_wakeup_ste_gpio >= 0) {
-		gpio_direction_output(ap_wakeup_ste_gpio, 0);
-		udelay(wk_pulse_width);
-		gpio_direction_output(ap_wakeup_ste_gpio, 1);
-		udelay(10);
-	}
-
-	omap_uart_block_sleep(ste_uart_id);
-
-	if (!gpio_get_value(ste_wakeup_ap_gpio)) {
-		mod_timer(&mapphone_wakeup_ste_timer,
-			jiffies + HANDSHAKE_WAKEUP_BP_TIMER_EXPIRES);
-		mapphone_wakeup_ste_timer_active = 1;
-	}
-}
-
-static int mapphone_ste_uart_check_peer(struct uart_omap_port *up)
-{
-	int status;
-	/* Returned value of zero means it is OK to start TX. */
-	if (ste_tat_mode)
-		return 0;
-
-	status = !gpio_get_value(ste_wakeup_ap_gpio);
-	/*
-	*bp status is ready in wake peer but changed to sleep now,it is maybe
-	*a bp wake up ap interrupt,so duble check it after wait 6us(interrupt
-	*pulse width) to get the real status.
-	*/
-	if (status && !mapphone_wakeup_ste_timer_active) {
-		udelay(6);
-		status = !gpio_get_value(ste_wakeup_ap_gpio);
-		printk(KERN_INFO "%s:maybe a wakeup double check %d\r\n",
-			__func__, status);
-	}
-
-	return status;
-
-}
-
-static void mapphone_ste_uart_update_handshake(struct uart_omap_port *up,
-					   int status)
-{
-	gpio_direction_output(ap_wakeup_ste_gpio, status);
-}
-
-
-void omap_uart_start_ste_ipc_tx(int index)
-{
-	if  (ste_tat_mode)
-		return;
-
-	if (!modem_is_ste_g4852() || !omap_uart_rts_status(index)) {
-		gpio_direction_output(ap_wakeup_ste_gpio, 1);
-	}
-	if (mapphone_wakeup_ste_timer_active) {
-		mapphone_wakeup_ste_timer_active = 0;
-		wakeup_ste_retry_count = 0;
-		omap_uart_start_ipc_tx(index);
-	}
-}
-
-void omap_uart_trace_set_ap_ready(void)
-{
-	if (ste_tat_mode)
-		return;
-	gpio_direction_output(ap_wakeup_ste_gpio, 1);
-}
-
-void set_ste_tat_mode(void)
-{
-	ste_tat_mode = 1;
-}
-
-int ste_in_tat_mode(void)
-{
-	return ste_tat_mode;
-}
-
-void set_ste_bplog_mode(int on)
-{
-	if (!ste_bplog_mode && on)
-		mapphone_ste_log_wake_enable();
-	else if (ste_bplog_mode && !on)
-		mapphone_ste_log_wake_disable();
-
-	ste_bplog_mode = on;
-}
-
-
-int get_ste_bplog_mode(void)
-{
-	return ste_bplog_mode;
 }

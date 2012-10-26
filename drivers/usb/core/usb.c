@@ -41,7 +41,6 @@
 #include <linux/scatterlist.h>
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
-#include "../../../arch/arm/mach-omap2/board-mapphone.h"
 
 #include "usb.h"
 
@@ -449,11 +448,6 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 	dev->bus = bus;
 	dev->parent = parent;
 	INIT_LIST_HEAD(&dev->filelist);
-
-#ifdef CONFIG_USB_SUSPEND
-	if (modem_is_ste_pnx6718())
-		usb_autosuspend_delay = 6;
-#endif
 
 #ifdef	CONFIG_PM
 	pm_runtime_set_autosuspend_delay(&dev->dev,

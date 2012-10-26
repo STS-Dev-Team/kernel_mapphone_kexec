@@ -114,8 +114,6 @@ struct omap_uart_port_info {
 	void (*wake_peer)(struct uart_port *);
 	void (*board_uart_probe)(struct uart_omap_port *);
 	void (*board_uart_remove)(struct uart_omap_port *);
-	int  (*board_check_peer)(struct uart_omap_port *);
-	void (*board_update_handshake)(struct uart_omap_port *, int);
 
 	void __iomem *wk_st;
 	void __iomem *wk_en;
