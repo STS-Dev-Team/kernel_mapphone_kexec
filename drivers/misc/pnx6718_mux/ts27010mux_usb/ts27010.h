@@ -349,7 +349,7 @@ struct dlci_struct {
 };
 
 struct chan_struct {
-	spinlock_t	write_lock; /* dlci write lock */
+	struct mutex	write_lock; /* dlci write lock */
 	u8		buf[TS0710MUX_SEND_BUF_SIZE];
 };
 

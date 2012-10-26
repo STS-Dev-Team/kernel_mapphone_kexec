@@ -588,8 +588,6 @@ static int __init modinit(void)
 		ERR("error at class_create %ld\n", PTR_ERR(devclass));
 		return -ENOMEM;
 	}
-
-	qcusbnet_debug = 1;
 	printk(KERN_INFO "%s: %s\n", DRIVER_DESC, DRIVER_VERSION);
 	return usb_register(&qcusbnet);
 }

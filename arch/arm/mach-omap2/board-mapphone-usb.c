@@ -15,7 +15,7 @@
 #include <asm/mach-types.h>
 #include <linux/of.h>
 #include "dt_path.h"
-#include "board-mapphone.h"
+#include <board-mapphone.h>
 #include <mach/hardware.h>
 #include <mach/gpio.h>
 #include <linux/gpio_mapping.h>
@@ -65,11 +65,6 @@ static struct device_pid mot_android_pid[MAX_DEVICE_TYPE_NUM] = {
 	{"mass_storage",        0},
 	{"mass_storage,adb",    0},
 	{"cdrom2",              0},
-	{"acm",			0},
-	{"acm,adb",		0},
-#ifdef CONFIG_MOT_FEAT_SPY
-	{"spy",                 0},
-#endif
 	{}
 };
 

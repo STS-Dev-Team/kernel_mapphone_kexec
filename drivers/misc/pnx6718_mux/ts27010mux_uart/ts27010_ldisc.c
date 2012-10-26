@@ -25,10 +25,6 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 
-#ifdef CONFIG_PNX6718_CTRL
-#include <linux/radio_ctrl/pnx6718_ctrl.h>
-#endif
-
 #include "ts27010.h"
 #include "ts27010_mux.h"
 #include "ts27010_ringbuf.h"
@@ -101,41 +97,109 @@ static void ts27010_ldisc_recv_worker(struct work_struct *work)
 	FUNC_EXIT();
 }
 
+#if 0
 int ts27010_ldisc_uart_send(struct tty_struct *tty, u8 *data, int len)
 {
 	int sent = 0;
+	int retry = 0;
 	int n;
-	int (*tty_write)(struct tty_struct *, const u8*, int) = NULL;
 	FUNC_ENTER();
+
+	if (tty == NULL || tty->disc_data == NULL) {
+		mux_print(MSG_ERROR,
+			"try to send mux command while ttyHS3 is closed.\n");
+		return -ENODEV;
+	}
+	WARN_ON(tty->disc_data != s_ld);
+
+	/* if UART IPC buffer is full, wait 20ms and retry 5 times */
+	retry = 5;
 	mutex_lock(&s_ld->send_lock);
+	while (tty->driver->ops->write_room(tty) < len && retry--) {
+		mux_print(MSG_ERROR,
+			"******** write overflow ******** retry: %d\n",
+			retry);
+		mutex_unlock(&s_ld->send_lock);
+		msleep_interruptible(20);
+		mutex_lock(&s_ld->send_lock);
+	}
+	if (retry < 0) {
+		mutex_unlock(&s_ld->send_lock);
+		mux_print(MSG_ERROR, "no room for writing\n");
+		return -EAGAIN;
+	}
+
+	retry = 5;
+	while (sent < len && retry) {
+		n = tty->driver->ops->write(tty, data + sent, len - sent);
+		if (n < 0) {
+			mux_print(MSG_ERROR, "write uart failed: %d\n", n);
+			break;
+		} else if (n == 0) {
+			retry--;
+			mux_print(MSG_WARNING, "partially write %d, retry %d\n",
+				sent, retry);
+			mutex_unlock(&s_ld->send_lock);
+			msleep_interruptible(20);
+			mutex_lock(&s_ld->send_lock);
+			continue;
+		} else if (n < len) {
+			mux_print(MSG_WARNING, "partially write %d\n", n);
+		}
+		sent += n;
+	}
+	mutex_unlock(&s_ld->send_lock);
+	if (retry < 0) {
+		/* TODO: should trigger a panic or reset BP */
+		mux_print(MSG_ERROR, "sent = %d\n", sent);
+		mux_uart_hexdump(MSG_ERROR, "send frame failed",
+			__func__, __LINE__, data, len);
+	}
+#ifdef PROC_DEBUG_MUX_STAT
+	if (g_nStatUARTDrvIO)
+		s_nDrvSent += sent;
+#endif
+
+	mux_print(MSG_DEBUG, "tx %d to BP\n", sent);
+	FUNC_EXIT();
+	return sent;
+}
+#endif
+
+int ts27010_ldisc_uart_send(struct tty_struct *tty, u8 *data, int len)
+{
+	int sent = 0;
+	int retry;
+	int n;
+	FUNC_ENTER();
+
 	if (tty == NULL || tty->disc_data == NULL) {
 		mux_print(MSG_ERROR,
 			"try to send mux data while ttyHS3 is closed.\n");
 		return -ENODEV;
-	} else {
-		tty_write = tty->driver->ops->write;
 	}
-	mutex_unlock(&s_ld->send_lock);
 	WARN_ON(tty->disc_data != s_ld);
 	WARN_ON(tty != ts27010mux_uart_tty);
 
+	/* if UART IPC buffer is full, wait 20ms and retry 5 times */
+	retry = 5;
+	while (tty->driver->ops->write_room(tty) < len && retry--) {
+		mux_print(MSG_ERROR,
+			"******** write overflow ******** retry: %d\n",
+			retry);
+		mux_print(MSG_ERROR, "no room for writing, "
+			"request %d, but left %d, retry: %d\n", len,
+			tty->driver->ops->write_room(tty), retry);
+		msleep_interruptible(20);
+	}
+	if (retry < 0) {
+		mux_print(MSG_ERROR, "no room for writing\n");
+		return -EAGAIN;
+	}
+
 	while (sent < len && ts27010mux_uart_tty) {
-		/*
 		n = tty->driver->ops->write(tty, data + sent, len - sent);
-		*/
-		mutex_lock(&s_ld->send_lock);
-		n = tty_write(tty, data + sent, len - sent);
-		mutex_unlock(&s_ld->send_lock);
-		if (n == 0) {
-			mux_print(MSG_WARNING, "write uart return 0, there may"
-				"be a flow control, retry after 50ms\n");
-			msleep_interruptible(50);
-			if (signal_pending(current)) {
-				mux_print(MSG_WARNING, "but got signal\n");
-				break;
-			}
-			continue;
-		} else if (n < 0) {
+		if (n <= 0) {
 			mux_print(MSG_ERROR, "write uart failed: %d-%d-%d\n",
 				n, sent, len);
 			mux_uart_hexdump(MSG_ERROR, "send frame failed",
@@ -159,17 +223,7 @@ int ts27010_ldisc_uart_send(struct tty_struct *tty, u8 *data, int len)
 		s_nDrvSent += sent;
 #endif
 
-#ifdef DUMP_FRAME
-	if (g_mux_uart_dump_seq)
-#ifdef TS27010_UART_RETRAN
-		mux_print(MSG_INFO, "tx %d to BP, sn(0x%x)\n",
-			sent, data[SEQUENCE_OFFSET]);
-#else
-		mux_print(MSG_INFO, "tx %d to BP\n", sent);
-#endif /* TS27010_UART_RETRAN */
-	else
-		mux_print(MSG_DEBUG, "tx %d to BP\n", sent);
-#endif /* DUMP_FRAME */
+	mux_print(MSG_DEBUG, "tx %d to BP\n", sent);
 	FUNC_EXIT();
 	return sent;
 }
@@ -232,8 +286,6 @@ static void ts27010_ldisc_close(struct tty_struct *tty)
 {
 	FUNC_ENTER();
 
-	cancel_delayed_work(&s_ld->recv_work);
-
 	atomic_dec(&s_ld->ref_count);
 	if (atomic_read(&s_ld->ref_count) > 0) {
 		mux_print(MSG_WARNING,
@@ -253,6 +305,7 @@ static void ts27010_ldisc_close(struct tty_struct *tty)
 			tty->driver->driver_name, tty->driver->name);
 	}
 
+	mutex_lock(&s_ld->send_lock);
 	/* TODO: goes away with clean tty interface */
 	ts27010mux_uart_tty = NULL;
 	atomic_set(&s_ld->ref_count, 0);
@@ -262,6 +315,7 @@ static void ts27010_ldisc_close(struct tty_struct *tty)
 		current->comm, current->pid);
 
 	tty->disc_data = NULL;
+	mutex_unlock(&s_ld->send_lock);
 	FUNC_EXIT();
 }
 
@@ -369,12 +423,7 @@ void ts27010_ldisc_uart_receive(struct tty_struct *tty,
 		s_nUARTRecved += count;
 #endif
 	/* save data */
-#ifdef DUMP_FRAME
-	if (g_mux_uart_dump_seq)
-		mux_print(MSG_INFO, "rx %d from BP\n", count);
-	else
-		mux_print(MSG_DEBUG, "rx %d from BP\n", count);
-#endif
+	mux_print(MSG_DEBUG, "rx %d from BP\n", count);
 	spin_lock_irqsave(&s_ld->recv_lock, flags);
 	n = ts27010_ringbuf_write(s_ld->rbuf, data, count);
 #ifdef PROC_DEBUG_MUX_STAT
@@ -440,24 +489,6 @@ static struct tty_ldisc_ops ts27010_ldisc = {
 	.write_wakeup = ts27010_ldisc_wakeup,
 };
 
-#ifdef CONFIG_PNX6718_CTRL
-void ts27010_mux_uart_on_wdi_intr(void)
-{
-	FUNC_ENTER();
-	mux_print(MSG_INFO, "mux got bp reset\n");
-	if (ts27010mux_uart_tty) {
-		mux_print(MSG_INFO, "hangup called\n");
-		ts27010_ldisc_hangup(ts27010mux_uart_tty);
-	}
-	FUNC_EXIT();
-}
-
-static struct td_bp_ext_interface s_mux_uart_intf = {
-	.name = (const char *)"ts27010_mux_uart_ctrl",
-	.on_wdi_interrupt =  ts27010_mux_uart_on_wdi_intr,
-};
-#endif
-
 int ts27010_ldisc_uart_init(void)
 {
 	int err;
@@ -492,16 +523,11 @@ int ts27010_ldisc_uart_init(void)
 	INIT_DELAYED_WORK(&s_ld->recv_work, ts27010_ldisc_recv_worker);
 	atomic_set(&s_ld->ref_count, 0);
 
-#ifdef CONFIG_PNX6718_CTRL
-	err = td_bp_register_ext_interface(&s_mux_uart_intf);
-	if (err)
-		mux_print(MSG_ERROR, "register interface to td_ctrl failed\n");
-#endif
-
 	err = tty_register_ldisc(N_TD_TS2710_UART, &ts27010_ldisc);
 	if (err < 0)
 		mux_print(MSG_ERROR,
 			"ts27010: unable to register line discipline\n");
+
 	FUNC_EXIT();
 	return err;
 

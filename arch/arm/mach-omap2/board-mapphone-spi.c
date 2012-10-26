@@ -139,7 +139,6 @@ unsigned short cpcap_regulator_off_mode_values[CPCAP_NUM_REGULATORS] = {
 
 enum usb_otg_muxmode {
 	OMAP_USB_OTG,
-	OMAP_UART_3 = 0x1,
 	OMAP_UART_2 = 0x2,
 	OMAP_SAFE_MODE = 0x7,
 };
@@ -844,13 +843,6 @@ static void omap_usb_otg_muxmode(enum cpcap_usb_otg_muxmode muxmode)
 				OMAP_CTRL_BASE + GPIO_MODE);
 			write_omap_mux_register(USBA0_OTG_DP, OMAP_USB_OTG, 1);
 			write_omap_mux_register(USBA0_OTG_DM, OMAP_USB_OTG, 1);
-			break;
-		case UART_3:
-			printk(KERN_ERR "CPCAP: usb to uart3!\n");
-			omap_writew((mux_regs_save | gpio_mask),
-				OMAP_CTRL_BASE + GPIO_MODE);
-			write_omap_mux_register(USBA0_OTG_DP, OMAP_UART_3, 1);
-			write_omap_mux_register(USBA0_OTG_DM, OMAP_UART_3, 1);
 			break;
 		case UART_2:
 			omap_writew((mux_regs_save | gpio_mask),

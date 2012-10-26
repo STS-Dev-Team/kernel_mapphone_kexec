@@ -24,7 +24,6 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/radio_ctrl/g4852_ctrl.h>
 
 #include "ts27010.h"
 #include "ts27010_mux.h"
@@ -44,8 +43,6 @@ struct ts27010_tty_channel_data {
 	int sent_size;
 	int recv_size;
 	int back_size;
-	int sent;
-	int recv;
 #endif
 };
 
@@ -53,10 +50,7 @@ struct ts27010_tty_data {
 	struct ts27010_tty_channel_data		chan[TS0710_MAX_MUX];
 };
 
-
-#ifndef HAS_PS_IND
-#define HAS_PS_IND
-#endif
+#undef HAS_PS_IND
 
 #ifdef HAS_PS_IND
 /*
@@ -66,7 +60,7 @@ struct ts27010_tty_data {
  */
 #define PS_ORG_CHN	6
 struct tty_struct *ts27010_uart_tty_table[TS0710_MAX_MUX + 1];
-static int dual_tty[TS0710_MAX_MUX] = {
+static const int dual_tty[TS0710_MAX_MUX] = {
 	-1, -1, -1, -1, -1, -1, TS0710_MAX_MUX, -1, -1, -1, -1, -1, -1,
 };
 static const int tty2dual[TS0710_MAX_MUX + 1] = {
@@ -88,6 +82,7 @@ static struct tty_driver *driver;
 #define TS0710MUX_MINOR_START 0
 
 #ifdef PROC_DEBUG_MUX_STAT
+static struct ts27010_tty_data *s_td;
 static int s_nWriteTotal;
 static int s_nWriteProt;
 static int s_nWriteCount;
@@ -98,11 +93,10 @@ static int s_nBackCount;
 void ts27010_tty_uart_dump_io_clear(void)
 {
 	int i;
-	struct ts27010_tty_data *td = driver->driver_state;
 	for (i = 0; i < TS0710_MAX_MUX; i++) {
-		td->chan[i].sent_size = 0;
-		td->chan[i].recv_size = 0;
-		td->chan[i].back_size = 0;
+		s_td->chan[i].sent_size = 0;
+		s_td->chan[i].recv_size = 0;
+		s_td->chan[i].back_size = 0;
 	}
 	s_nWriteTotal = 0;
 	s_nWriteProt = 0;
@@ -115,13 +109,12 @@ void ts27010_tty_uart_dump_io_clear(void)
 void ts27010_tty_uart_dump_io(void)
 {
 	int i;
-	struct ts27010_tty_data *td = driver->driver_state;
 	for (i = 0; i < TS0710_MAX_MUX; i++) {
 		mux_print(MSG_ERROR,
 			"(%d) refcount: %d, sent: %d, recv: %d, back: %d\n",
-			i, atomic_read(&td->chan[i].ref_count),
-			td->chan[i].sent_size, td->chan[i].recv_size,
-			td->chan[i].back_size);
+			i, atomic_read(&s_td->chan[i].ref_count),
+			s_td->chan[i].sent_size, s_td->chan[i].recv_size,
+			s_td->chan[i].back_size);
 	}
 	mux_print(MSG_ERROR, "Total writen size: %d, prot: %d, "
 		"total read size: %d\n",
@@ -142,16 +135,9 @@ static int tty_push(struct tty_struct *tty, u8 *buf, int len)
 			mux_print(MSG_WARNING,
 				"written size %d is not wanted %d\n",
 				count, len - sent);
-			/* should I call it? */
-			/* tty_flip_buffer_push(tty); */
-			msleep_interruptible(100);
-			if (signal_pending(current)) {
-				mux_print(MSG_ERROR, "but got signal, "
-					"send failed\n");
-				break;
-			}
 		}
 		sent += count;
+		/* tty_flip_buffer_push(tty); */
 	}
 	tty_flip_buffer_push(tty);
 	FUNC_EXIT();
@@ -383,7 +369,6 @@ static int ts27010_uart_tty_queue_recv_data(struct mux_recver_t *recver,
 	list_add_tail(&mux_list->list, &recver->m_datalist);
 #ifdef PROC_DEBUG_MUX_STAT
 	td->chan[line].recv_size += len;
-	td->chan[line].recv += len;
 	s_nRecvCount++;
 	s_nReadTotal += len;
 #endif
@@ -432,16 +417,6 @@ static int tty_direct_push(struct tty_struct *tty, int line,
 			__func__, __LINE__, buf, len);
 #endif
 	ret = tty_push(tty, buf, len);
-	kfree(buf);
-
-#ifdef DUMP_FRAME
-	if (g_mux_uart_dump_seq)
-		mux_print(MSG_INFO, "push %d into /dev/mux%d "
-			"tty buffer\n", len, line);
-	else
-		mux_print(MSG_DEBUG, "push %d into /dev/mux%d "
-			"tty buffer\n", len, line);
-#endif
 
 	FUNC_EXIT();
 
@@ -506,7 +481,6 @@ int ts27010_tty_uart_send_rbuf(int line, struct ts27010_ringbuf *rbuf,
 #else /* UART_QUEUE_RECV */
 #ifdef PROC_DEBUG_MUX_STAT
 	td->chan[line].recv_size += len;
-	td->chan[line].recv += len;
 	s_nRecvCount++;
 	s_nReadTotal += len;
 #endif
@@ -558,6 +532,7 @@ static int ts27010_tty_open_ps_ind(int line, struct tty_struct *tty)
 			"tty device: /dev/mux%d opened "
 			"more than 1 times by %s:%d\n",
 			line, current->comm, current->pid);
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -579,7 +554,7 @@ static int ts27010_tty_open(struct tty_struct *tty, struct file *filp)
 	mux_print(MSG_INFO, "tty device /dev/mux%d will be opened by %s:%d\n",
 		line, current->comm, current->pid);
 #ifdef HAS_PS_IND
-	if (line == TS0710_MAX_MUX && !modem_is_ste_g4852())
+	if (line == TS0710_MAX_MUX)
 		return ts27010_tty_open_ps_ind(line, tty);
 #endif
 	if ((line < 0) || (line >= TS0710_MAX_MUX)) {
@@ -599,10 +574,6 @@ static int ts27010_tty_open(struct tty_struct *tty, struct file *filp)
 		WARN_ON(tty != ts27010_uart_tty_table[line]);
 	} else {
 		td->chan[line].tty = tty;
-#ifdef PROC_DEBUG_MUX_STAT
-		td->chan[line].sent = 0;
-		td->chan[line].recv = 0;
-#endif
 		ts27010_uart_tty_table[line] = tty;
 		mux_print(MSG_INFO, "tty /dev/mux%d opened successfully\n",
 			line);
@@ -616,21 +587,6 @@ static int ts27010_tty_open(struct tty_struct *tty, struct file *filp)
 
 	FUNC_EXIT();
 	return 0;
-}
-
-void ts27010_tty_uart_reset_tty(int line)
-{
-	struct ts27010_tty_data *td = driver->driver_state;
-	mux_print(MSG_INFO, "reset tty /dev/mux%d while td: %p\n",
-		line, td);
-	if (td == NULL)
-		return;
-	if (line < 0 || line >= TS0710_MAX_MUX)
-		return;
-
-	td->chan[line].tty = NULL;
-	ts27010_uart_tty_table[line] = NULL;
-	atomic_set(&td->chan[line].ref_count, 0);
 }
 
 static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
@@ -647,12 +603,12 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 		mux_print(MSG_INFO,
 			"close softmodem tty: /dev/mux%d by %s:%d\n",
 			line, current->comm, current->pid);
-		return;
+		return ;
 	}
 #endif
 	if ((line < 0) || (line >= TS0710_MAX_MUX)) {
 		mux_print(MSG_ERROR, "tty index out of range: %d.\n", line);
-		return;
+		return ;
 	}
 
 	if (atomic_read(&td->chan[line].ref_count) == 0) {
@@ -666,7 +622,6 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 			line, atomic_read(&td->chan[line].ref_count));
 		atomic_set(&td->chan[line].ref_count, 0);
 	} else if (atomic_read(&td->chan[line].ref_count) > 1) {
-		ts27010_mux_uart_line_close(tty->index);
 		mux_print(MSG_WARNING,
 			"tty device: /dev/mux%d isn't closed "
 			"because of non-zero refcount\n", line);
@@ -674,10 +629,6 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 	} else {
 		ts27010_mux_uart_line_close(tty->index);
 
-#ifdef PROC_DEBUG_MUX_STAT
-		mux_print(MSG_INFO, "tty /dev/mux%d sent: %d, recv: %d\n",
-			line, td->chan[line].sent, td->chan[line].recv);
-#endif
 		td->chan[line].tty = NULL;
 		ts27010_uart_tty_table[line] = NULL;
 		atomic_set(&td->chan[line].ref_count, 0);
@@ -690,9 +641,8 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 		 *
 		 * I belive this is unecessary
 		 */
-		mux_print(MSG_INFO, "tty /dev/mux%d closed successfully\n",
-			line);
 	}
+	mux_print(MSG_INFO, "tty /dev/mux%d closed successfully\n", line);
 	FUNC_EXIT();
 }
 
@@ -706,14 +656,9 @@ static int ts27010_tty_write(struct tty_struct *tty,
 		mux_print(MSG_ERROR, "tty index out of range: %d.\n", line);
 		return -ENODEV;
 	}
+	mux_print(MSG_DEBUG, "write /dev/mux%d %d by %s:%d\n",
+		line, count, current->comm, current->pid);
 #ifdef DUMP_FRAME
-	if (g_mux_uart_dump_seq)
-		mux_print(MSG_INFO, "write /dev/mux%d %d by %s:%d\n",
-			line, count, current->comm, current->pid);
-	else
-		mux_print(MSG_DEBUG, "write /dev/mux%d %d by %s:%d\n",
-			line, count, current->comm, current->pid);
-
 	if (g_mux_uart_dump_user_data)
 		mux_uart_hexdump(MSG_ERROR, "dump tty_write",
 			__func__, __LINE__, buf, count);
@@ -727,8 +672,6 @@ static int ts27010_tty_write(struct tty_struct *tty,
 	if (ret == count) {
 		((struct ts27010_tty_data *)tty->driver->driver_state)
 			->chan[tty->index].sent_size += count;
-		((struct ts27010_tty_data *)tty->driver->driver_state)
-			->chan[tty->index].sent += count;
 		s_nWriteTotal += count;
 		s_nWriteProt += count + (count < 128 ? 6 : 7);
 		s_nWriteCount++;
@@ -744,15 +687,10 @@ static int ts27010_tty_write_room(struct tty_struct *tty)
 	int ret;
 	int line = tty->index;
 	FUNC_ENTER();
-#ifdef HAS_PS_IND
-	if ((line < 0) || (line > TS0710_MAX_MUX)) {
-#else
 	if ((line < 0) || (line >= TS0710_MAX_MUX)) {
-#endif
 		mux_print(MSG_ERROR, "tty index out of range: %d.\n", line);
 		return -ENODEV;
 	}
-	line = tty2dual[line];
 	ret = ts27010_mux_uart_line_write_room(tty->index);
 	FUNC_EXIT();
 	return ret;
@@ -773,6 +711,7 @@ static void ts27010_tty_flush_buffer(struct tty_struct *tty)
 	line = tty2dual[line];
 	ts27010_mux_uart_line_flush_buffer(line);
 	FUNC_EXIT();
+
 }
 
 static int ts27010_tty_chars_in_buffer(struct tty_struct *tty)
@@ -828,7 +767,7 @@ static void ts27010_tty_unthrottle(struct tty_struct *tty)
 	FUNC_EXIT();
 }
 
-static int ts27010_tty_ioctl(struct tty_struct *tty,
+static int ts27010_tty_ioctl(struct tty_struct *tty, struct file *file,
 		     unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -900,6 +839,7 @@ int ts27010_tty_uart_init(void)
 #endif
 
 #ifdef PROC_DEBUG_MUX_STAT
+	s_td = NULL;
 	s_nWriteTotal = 0;
 	s_nWriteProt = 0;
 	s_nWriteCount = 0;
@@ -944,11 +884,12 @@ int ts27010_tty_uart_init(void)
 #ifdef HAS_PS_IND
 	/* PS indicator */
 	ts27010_uart_tty_table[i] = NULL;
-	if (modem_is_ste_g4852())
-		dual_tty[PS_ORG_CHN] = -1;
 #endif
 
 	driver->driver_state = td;
+#ifdef PROC_DEBUG_MUX_STAT
+	s_td = td;
+#endif
 
 	driver->driver_name = "td_ts0710mux_uart";
 	driver->name = "mux";

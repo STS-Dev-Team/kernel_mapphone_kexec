@@ -38,29 +38,6 @@ config MDM9600_CTRL
 
 	  If unsure, say N.
 
-config G4852_CTRL
-	bool "Motorola G4852(STE) Modem Controller"
-	default n
-	select RADIO_CTRL_CLASS
-	---help---
-	  Enables the device driver to control and interface with
-	  the STE G4852 modem co-processor.  This module is needed to monitor
-	  modem panics, interact with the modem during factory resets,
-	  and allow modem power up/down support.
-
-	  If unsure, say N.
-
-config PNX6718_CTRL
-        bool "Motorola PNX6718(STE) Modem ctrl driver"
-        default n
-	---help---
-	  Enables the device driver to control and interface with
-	  the STE PNX6718 modem co-processor.  This module is needed to monitor
-	  modem panics, interact with the modem during factory resets,
-	  and allow modem power up/down support.
-
-	  If unsure, say N.
-
 config WRIGLEY_CTRL
 	bool "Motorola Wrigley Modem Controller"
 	default n

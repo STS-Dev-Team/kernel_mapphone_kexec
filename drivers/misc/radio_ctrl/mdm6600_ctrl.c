@@ -298,40 +298,18 @@ static void set_bp_resin(int on)
 static void update_bp_status(void)
 {
 	int bp_status_prev_idx = bp_status_idx;
-	int i;
 	int bp_power_prev_idx = bp_power_idx;
 
-	printk("%s get_bp_status\n",__func__);
 	bp_status_idx = get_bp_status();
-	/* No CDMA network when first power on after upgrade the software,
-	 * because the bp status is not right, so wait for bp ready status
-	 * when first powerup, becaue BP will execute restore RF. It will
-	 * take about 30~40 seconds, so AP should wait 50s for the bp status
-	 * changes from undefined status to awake status.
-	 */
-
-	printk("%s wait for not undefined %d\n", __func__, bp_status_prev_idx);
-/*
-	if (bp_status_prev_idx == BP_STATUS_UNDEFINED) {
-		for (i = 0; i < 100; i++) {
-			if (bp_status_idx != BP_STATUS_PANIC)
-				break;
-			msleep(500);
-			bp_status_idx = get_bp_status();
-		}
-	}
-*/
-
-	printk("%s get_bp_power_status\n",__func__);
 	bp_power_idx = get_bp_power_status();
 
 	if (bp_power_idx == bp_power_prev_idx)
-		printk("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
+		pr_debug("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
 			bp_status_string(bp_status_prev_idx),
 			bp_status_string(bp_status_idx),
 			bp_power_state_string(bp_power_idx));
 	else
-		printk("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
+		pr_info("%s: modem status: %s -> %s [power %s]\n", mdmctrl,
 			bp_status_string(bp_status_prev_idx),
 			bp_status_string(bp_status_idx),
 			bp_power_state_string(bp_power_idx));
@@ -340,7 +318,6 @@ static void update_bp_status(void)
 		mdm6600_ctrl_bp_is_shutdown = false;
 	else
 		mdm6600_ctrl_bp_is_shutdown = true;
-	printk("%s emit uevent\n",__func__);
 	kobject_uevent(&radio_cdev.dev->kobj, KOBJ_CHANGE);
 }
 
@@ -487,7 +464,7 @@ static int __devinit mdm6600_ctrl_probe(struct platform_device *pdev)
 	radio_cdev.name = pdata->name;
 
 	dev_info(&pdev->dev, "mdm_ctrl_probe\n");
-	printk("%s:%s radio_cdev = %p\n", __func__, pdata->name, &radio_cdev);
+	pr_debug("%s:%s radio_cdev = %p\n", __func__, pdata->name, &radio_cdev);
 
 	for (i = 0; i < MDM6600_CTRL_NUM_GPIOS; i++) {
 		if (mdm_gpio_setup(&pdata->gpios[i])) {
@@ -497,22 +474,16 @@ static int __devinit mdm6600_ctrl_probe(struct platform_device *pdev)
 		}
 	}
 
-	printk("%s create workqueue\n", __func__);
-
 	mdm6600_wq = create_singlethread_workqueue("mdm6600_ctrl_wq");
 	if (!mdm6600_wq) {
 		dev_err(&pdev->dev, "Cannot create work queue.\n");
 		goto probe_cleanup;
 	}
 
-	printk("%s gpio setup internal\n", __func__);
-
 	if (mdm_gpio_setup_internal(pdata) < 0) {
 		dev_err(&pdev->dev, "Failed to setup bp  status irq\n");
 		goto err_setup;
 	}
-
-	printk("%s radio dev register\n", __func__);
 
 	if (radio_dev_register(&radio_cdev)) {
 		pr_err("%s: failed to register mdm_ctr device\n", __func__);
@@ -520,15 +491,9 @@ static int __devinit mdm6600_ctrl_probe(struct platform_device *pdev)
 	}
 
 	mdm_ctrl.pdata->bootmode = BOOTMODE_NORMAL;
-
-	printk("%s modem powerup\n",__func__);
-	mdm_ctrl_powerup();
-
-	printk("%s update bp status\n", __func__);
 	update_bp_status();
-	printk("%s register reboot notifier\n", __func__);
 	register_reboot_notifier(&mdm6600_reboot_notifier);
-	printk("%s done\n", __func__);
+
 	return 0;
 
 err_setup:

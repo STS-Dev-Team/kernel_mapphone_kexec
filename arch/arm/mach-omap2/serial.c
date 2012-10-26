@@ -436,8 +436,6 @@ void __init omap_serial_init_port(struct omap_board_data *bdata,
 	pdata->board_uart_probe = info->board_uart_probe;
 	pdata->board_uart_remove = info->board_uart_remove;
 	pdata->wake_peer = info->wake_peer;
-	pdata->board_check_peer = info->board_check_peer;
-	pdata->board_update_handshake = info->board_update_handshake;
 	pdata->rts_mux_driver_control = info->rts_mux_driver_control;
 	pdata->wer = info->wer;
 	pdata->ctsrts = info->ctsrts;

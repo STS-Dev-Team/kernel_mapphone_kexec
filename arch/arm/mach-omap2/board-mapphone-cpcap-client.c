@@ -42,7 +42,6 @@
 #define MAPPHONE_BP_MDM6600	0x001E0001
 #define MAPPHONE_BP_MDM9600	0x001E0002
 #define MAPPHONE_BP_STE_M570	0x00240000
-#define MAPPHONE_BP_STE_PNX6718 0x00240002
 #define MAPPHONE_BP_W3GLTE	0x0003000F
 
 static struct platform_device cpcap_3mm5_device = {
@@ -433,9 +432,6 @@ static void get_cpcap_audio_data(void)
 		break;
 	case MAPPHONE_BP_STE_M570:
 		data.voice_type = VOICE_TYPE_STE;
-		break;
-	case MAPPHONE_BP_STE_PNX6718:
-		data.voice_type = VOICE_TYPE_STE_PNX6718;
 		break;
 	case MAPPHONE_BP_W3GLTE:
 		data.voice_type = VOICE_TYPE_MOT;
