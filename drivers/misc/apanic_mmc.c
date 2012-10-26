@@ -613,7 +613,6 @@ static void apanic_mmc_logbuf_dump(void)
 	ctx->written = threads_offset;
 	start_apanic_threads = 1;
 	show_state_filter(0, SHOW_KTHREADS);
-	show_cpu_current_stack_mem();
 	start_apanic_threads = 0;
 	ctx->buf_offset = ALIGN(ctx->written, 512);
 	ctx->written += apanic_write_console_mmc(ctx->buf_offset);

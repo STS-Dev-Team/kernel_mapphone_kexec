@@ -339,11 +339,6 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 	}
 }
 
-void show_process_mem(unsigned long addr, int nbtyes, const char *name)
-{
-	show_data(addr, nbtyes, name);
-}
-
 static void show_extra_register_data(struct pt_regs *regs, int nbytes)
 {
 	mm_segment_t fs;
