@@ -375,13 +375,9 @@ void __init omap2_init_common_infrastructure(void)
 		omap3xxx_clockdomains_init();
 		omap3xxx_hwmod_init();
 	} else if (cpu_is_omap44xx()) {
-		printk("voltagedomains\n");
 		omap44xx_voltagedomains_init();
-		printk("powerdomains\n");
 		omap44xx_powerdomains_init();
-		printk("clockdomains\n");
 		omap44xx_clockdomains_init();
-		printk("hwmod init\n");
 		omap44xx_hwmod_init();
 	} else {
 		pr_err("Could not init hwmod data - unknown SoC\n");
@@ -393,7 +389,6 @@ void __init omap2_init_common_infrastructure(void)
 #else
 	postsetup_state = _HWMOD_STATE_ENABLED;
 #endif
-	printk("hwmod foreach\n");
 	omap_hwmod_for_each(_set_hwmod_postsetup_state, &postsetup_state);
 
 	/*
@@ -414,7 +409,6 @@ void __init omap2_init_common_infrastructure(void)
 				     _set_hwmod_postsetup_state,
 				     &postsetup_state);
 
-	printk("omap pm early init\n");
 	omap_pm_if_early_init();
 
 	if (cpu_is_omap2420())
@@ -424,10 +418,7 @@ void __init omap2_init_common_infrastructure(void)
 	else if (cpu_is_omap34xx())
 		omap3xxx_clk_init();
 	else if (cpu_is_omap44xx())
-	{
-		printk("clk init\n");
 		omap4xxx_clk_init();
-	}
 	else
 		pr_err("Could not init clock framework - unknown SoC\n");
 }
