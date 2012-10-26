@@ -788,34 +788,6 @@ static struct init_tags {
 	{ 0, ATAG_NONE }
 };
 
-#define DINARACG_GB_FB_VRAM  "vram=24M omapgpu.vram=0:8M,1:16M,2:16MT "
-#define DINARACG_ICS_FB_VRAM "vram=11940K omapfb.vram=0:8256K,1:4K,2:3680K "
-
-static void gb_kerel_cmdline_fixup(char *boot_cmdline)
-{
-	int i, delta, len, vram_end;
-	char *p_vram;
-
-	/*
-	 * For DinaraCG phones shipped with GB memory map, we overwrite the vram
-	 * and omapgpu.vram with ICS' values so that DinaraCG can be upgraded to
-	 * ICS without ctd.bin change.
-	 */
-	p_vram = strstr(boot_cmdline, DINARACG_GB_FB_VRAM);
-	if (p_vram) {
-		delta = strlen(DINARACG_ICS_FB_VRAM)
-			- strlen(DINARACG_GB_FB_VRAM);
-		vram_end = (int)(p_vram - boot_cmdline)
-			+ strlen(DINARACG_GB_FB_VRAM);
-		len = strlen(boot_cmdline);
-		for (i = len; i >= vram_end; i--)
-			boot_cmdline[i + delta] = boot_cmdline[i];
-		strncpy(p_vram, DINARACG_ICS_FB_VRAM,
-			strlen(DINARACG_ICS_FB_VRAM));
-	}
-
-}
-
 static int __init customize_machine(void)
 {
 	/* customizes platform devices, or adds new ones */
@@ -959,7 +931,6 @@ static struct machine_desc * __init setup_machine_tags(unsigned int nr)
 
 	/* parse_early_param needs a boot_command_line */
 	strlcpy(boot_command_line, from, COMMAND_LINE_SIZE);
-	gb_kerel_cmdline_fixup(boot_command_line);
 
 	return mdesc;
 }
@@ -993,27 +964,20 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();
 
 	sanity_check_meminfo();
-
-	printk("arm memblock init\n");
 	arm_memblock_init(&meminfo, mdesc);
-	printk("paging init\n");
+
 	paging_init(mdesc);
-	printk("request standard resources\n");
 	request_standard_resources(mdesc);
-	printk("unflatten device tree\n");
+
 	unflatten_device_tree();
 
-	printk("smp init cpus\n");
 #ifdef CONFIG_SMP
 	if (is_smp())
 		smp_init_cpus();
 #endif
-	printk("reserve crash kern\n");
 	reserve_crashkernel();
 
-	printk("cpu init\n");
 	cpu_init();
-	printk("tcm init\n");
 	tcm_init();
 
 #ifdef CONFIG_MULTI_IRQ_HANDLER
@@ -1027,14 +991,10 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
-	printk("early trap init\n");
 	early_trap_init();
 
-	printk("mdesc init early\n");
 	if (mdesc->init_early)
 		mdesc->init_early();
-
-	printk("setup arch done\n");
 }
 
 
