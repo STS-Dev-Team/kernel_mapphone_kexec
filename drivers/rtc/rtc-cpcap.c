@@ -42,8 +42,7 @@ static long cpcap_rtc_ioctl(struct file *file,
 static unsigned int cpcap_rtc_poll(struct file *file, poll_table *wait);
 static int cpcap_rtc_read_time(struct device *dev, struct rtc_time *tm);
 #endif
-int modem_is_ste_g4852(void);
-void sync_bp_datetime(void);
+
 struct cpcap_time {
 	unsigned short day;
 	unsigned short tod1;
@@ -294,9 +293,6 @@ static int cpcap_rtc_set_time(struct device *dev, struct rtc_time *tm)
 		cpcap_irq_unmask(rtc->cpcap, CPCAP_IRQ_1HZ);
 	if (!alarm_masked)
 		cpcap_irq_unmask(rtc->cpcap, CPCAP_IRQ_TODA);
-
-	if (!ret && modem_is_ste_g4852())
-		sync_bp_datetime();
 
 #ifdef CONFIG_RTC_INTF_SECCLKD
 	mutex_lock(&rtc->lock);
