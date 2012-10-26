@@ -964,27 +964,20 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();
 
 	sanity_check_meminfo();
-
-	printk("arm memblock init\n");
 	arm_memblock_init(&meminfo, mdesc);
-	printk("paging init\n");
+
 	paging_init(mdesc);
-	printk("request standard resources\n");
 	request_standard_resources(mdesc);
-	printk("unflatten device tree\n");
+
 	unflatten_device_tree();
 
-	printk("smp init cpus\n");
 #ifdef CONFIG_SMP
 	if (is_smp())
 		smp_init_cpus();
 #endif
-	printk("reserve crash kern\n");
 	reserve_crashkernel();
 
-	printk("cpu init\n");
 	cpu_init();
-	printk("tcm init\n");
 	tcm_init();
 
 #ifdef CONFIG_MULTI_IRQ_HANDLER
@@ -998,14 +991,10 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
-	printk("early trap init\n");
 	early_trap_init();
 
-	printk("mdesc init early\n");
 	if (mdesc->init_early)
 		mdesc->init_early();
-
-	printk("setup arch done\n");
 }
 
 
