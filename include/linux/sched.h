@@ -299,10 +299,6 @@ static inline void show_state(void)
 
 extern void show_regs(struct pt_regs *);
 
-extern void show_process_mem(unsigned long addr, int nbtyes, const char *name);
-
-void show_cpu_current_stack_mem(void);
-
 /*
  * TASK is a pointer to the task whose backtrace we want to see (or NULL for current
  * task), SP is the stack pointer of the first frame that should be shown in the back
