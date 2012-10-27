@@ -53,7 +53,6 @@ static void __init mapphone_touch_free(
 		struct device_node *dtnodes[]);
 static int __init mapphone_touch_gpio_init(const char *rst_name,
 		const char *int_name,
-		const char *power_rst_name,
 		struct i2c_board_info *i2c_info);
 static int __init mapphone_touch_vkeys_init(
 		struct device_node *dtnode,
@@ -172,8 +171,7 @@ void __init mapphone_touch_panel_init(struct i2c_board_info *i2c_info)
 			goto touch_init_fail;
 	}
 
-	err = mapphone_touch_gpio_init("touch_panel_rst", "touch_panel_int",
-						"touch_panel_en", i2c_info);
+	err = mapphone_touch_gpio_init("touch_panel_rst", "touch_panel_int", i2c_info);
 	if (err < 0)
 		goto touch_init_fail;
 
@@ -278,8 +276,7 @@ void __init mapphone_touch_btn_init(struct i2c_board_info *i2c_info)
 			goto touch_btn_init_fail;
 	}
 
-	err = mapphone_touch_gpio_init("touch_btn_rst", "touch_btn_int",
-						NULL, i2c_info);
+	err = mapphone_touch_gpio_init("touch_btn_rst", "touch_btn_int", i2c_info);
 	if (err < 0)
 		goto touch_btn_init_fail;
 
@@ -583,7 +580,6 @@ static void __init mapphone_touch_free(
 
 static int __init mapphone_touch_gpio_init(const char *rst_name,
 				const char *int_name,
-				const char *power_rst_name,
 				struct i2c_board_info *i2c_info)
 {
 	int err = 0;
@@ -631,29 +627,6 @@ static int __init mapphone_touch_gpio_init(const char *rst_name,
 		goto touch_gpio_init_fail;
 	}
 	i2c_info->irq = gpio_to_irq(pin);
-
-	/*
-	* when dinara has the ESD effect, it may not recovery even if use the
-	* hardware reset. so add a specifical GPIO to control the touch_ic's
-	* reset.
-	*/
-	if (power_rst_name == NULL)
-		goto touch_gpio_init_fail;
-
-	pin = get_gpio_by_name(power_rst_name);
-	if (pin >= 0) {
-		err = gpio_request(pin, power_rst_name);
-		if (err >= 0) {
-			/* Set high level to enable power */
-			gpio_direction_output(pin, 1);
-		} else {
-			printk(KERN_ERR "%s: Power reset GPIO request failed.\n",
-					__func__);
-		}
-	} else {
-		printk(KERN_ERR "%s: Cannot acquire power reset pin.\n",
-			__func__);
-	}
 
 touch_gpio_init_fail:
 	return err;

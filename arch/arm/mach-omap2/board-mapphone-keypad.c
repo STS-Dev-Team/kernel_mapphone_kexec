@@ -37,8 +37,6 @@
 #include <linux/adp5588_keypad.h>
 #endif
 
-#include <plat/omap-pm.h>
-#include "mux.h"
 #define OMAP4_KBDOCP_BASE               0x4A31C000
 #define GPIO_NOT_INITIALIZED       -1
 
@@ -120,40 +118,6 @@ static struct matrix_keymap_data omap_keymap_data = {
 	.keymap			= omap_keymap,
 	.keymap_size		= ARRAY_SIZE(omap_keymap),
 };
-
-
-#define GPMC_AD11_OFFSET 0x00000056
-#define GPMC_A17_OFFSET 0x00000062
-static void keypad_pad_wkup(int enable)
-{
-	struct omap_mux_partition *partition = omap_mux_get("core");
-	u16 old_mode1, old_mode2;
-
-	/* PAD wakup for keyboard is needed for off mode
-	 * due to IO isolation.
-	 */
-	if (!off_mode_enabled)
-		return;
-
-	old_mode1 = omap_mux_read(partition, GPMC_AD11_OFFSET);
-	old_mode2 = omap_mux_read(partition, GPMC_A17_OFFSET);
-
-	if (enable) {
-		old_mode1 |= OMAP_WAKEUP_EN;
-		old_mode2 |= OMAP_WAKEUP_EN;
-	} else {
-		old_mode1 &= ~OMAP_WAKEUP_EN;
-		old_mode2 &= ~OMAP_WAKEUP_EN;
-	}
-
-	pr_info("%s: Setting signal GPMC_AD11_OFFSET 0x%04x\n",
-			__func__, old_mode1);
-	omap_mux_write(partition, old_mode1, GPMC_AD11_OFFSET);
-
-	pr_info("%s: Setting signal GPMC_A17_OFFSET 0x%04x\n",
-			__func__, old_mode2);
-	omap_mux_write(partition, old_mode2, GPMC_A17_OFFSET);
-}
 
 static struct omap4_keypad_platform_data omap_kp_data = {
 	.keymap_data	= &omap_keymap_data,
@@ -353,9 +317,6 @@ static int __init mapphone_init_keypad(void)
 		if (is_gpiokey_found)
 			platform_device_register(&mapphone_gpiokey_device);
 	}
-
-	omap_kp_data.keypad_pad_wkup = keypad_pad_wkup;
-
 	status = omap4_keyboard_init(&omap_kp_data);
 	if (status)
 		pr_err("Keypad initialization failed: %d\n", status);

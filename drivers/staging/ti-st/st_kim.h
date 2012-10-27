@@ -134,7 +134,7 @@ struct bts_header {
 	uint32_t version;
 	uint8_t future[24];
 	uint8_t actions[0];
-} __packed;
+} __attribute__ ((packed));
 
 /**
  * struct bts_action - Each .bts action has its own type of
@@ -144,26 +144,26 @@ struct bts_action {
 	uint16_t type;
 	uint16_t size;
 	uint8_t data[0];
-} __packed;
+} __attribute__ ((packed));
 
 struct bts_action_send {
 	uint8_t data[0];
-} __packed;
+} __attribute__ ((packed));
 
 struct bts_action_wait {
 	uint32_t msec;
 	uint32_t size;
 	uint8_t data[0];
-} __packed;
+} __attribute__ ((packed));
 
 struct bts_action_delay {
 	uint32_t msec;
-} __packed;
+} __attribute__ ((packed));
 
 struct bts_action_serial {
 	uint32_t baud;
 	uint32_t flow_control;
-} __packed;
+} __attribute__ ((packed));
 
 /**
  * struct hci_command - the HCI-VS for intrepreting
@@ -176,7 +176,7 @@ struct hci_command {
 	uint16_t opcode;
 	uint8_t plen;
 	uint32_t speed;
-} __packed;
+} __attribute__ ((packed));
 
 
 #endif /* ST_KIM_H */

@@ -515,15 +515,6 @@ int lm3532_register_init(struct lm3532_bl *data)
 	ret |= lm3532_write(client, LM3532_CTRL_B_FSC, pdata->ctrl_b_fsc);
 	ret |= lm3532_write(client, LM3532_CTRL_C_FSC, pdata->ctrl_c_fsc);
 
-	if (get_panel_state() == MAPPHONE_PANEL_INIT_DONE) {
-		ret |= lm3532_write(client, LM3532_CTRL_A_PWM,
-			pdata->ctrl_a_pwm);
-		ret |= lm3532_write(client, LM3532_CTRL_B_PWM,
-			pdata->ctrl_b_pwm);
-		ret |= lm3532_write(client, LM3532_CTRL_C_PWM,
-			pdata->ctrl_c_pwm);
-	}
-
 	ret |= lm3532_write(client, LM3532_SUSD_RAMP, pdata->susd_ramp);
 	ret |= lm3532_write(client, LM3532_RUNTIME_RAMP, pdata->runtime_ramp);
 
@@ -623,18 +614,30 @@ static int lm3532_bl_init(struct lm3532_bl *data)
 	}
 
 	if (data->led_a) {
+		ret = lm3532_write(data->led_a->client,
+			LM3532_CTRL_A_ZT_4 + (data->led_a->control * 5),
+			data->led_a->new_brightness);
+
 		ret |= lm3532_led_register_init(data->client, data->led_a);
 
 		if (ret)
 			dev_err(&client->dev, "LED A register init failed\n");
 	}
 	if (data->led_b) {
+		ret = lm3532_write(data->led_b->client,
+			LM3532_CTRL_A_ZT_4 + (data->led_b->control * 5),
+			data->led_b->new_brightness);
+
 		ret |= lm3532_led_register_init(data->client, data->led_b);
 
 		if (ret)
 			dev_err(&client->dev, "LED B register init failed\n");
 	}
 	if (data->led_c) {
+		ret = lm3532_write(data->led_c->client,
+			LM3532_CTRL_A_ZT_4 + (data->led_c->control * 5),
+			data->led_c->new_brightness);
+
 		ret |= lm3532_led_register_init(data->client, data->led_c);
 
 		if (ret)

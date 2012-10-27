@@ -38,10 +38,10 @@
 #endif
 
 #define CY_I2C_NAME                 "cyttsp3-i2c"
-#define CY_DRIVER_VERSION           "Rev3-2M-25M5"
-#define CY_DRIVER_DATE              "2012-03-13"
+#define CY_DRIVER_VERSION           "Rev3-2M-19M1"
+#define CY_DRIVER_DATE              "2011-09-08"
 
-#define CY_NUM_RETRY                10 /* max retries for rd/wr ops */
+#define CY_NUM_RETRY                26 /* max retries for rd/wr ops */
 
 #ifdef CONFIG_TOUCHSCREEN_DEBUG
 /* use the following defines for dynamic debug printing */
@@ -49,23 +49,23 @@
  * Level 0: Default Level
  * All debug (cyttsp_dbg) prints turned off
  */
-#define CY_DBG_LVL_0			0
+#define CY_DBG_LVL_0 0
 /*
  * Level 1:  Used to verify driver and IC are working
  *    Input from IC, output to event queue
  */
-#define CY_DBG_LVL_1			1
+#define CY_DBG_LVL_1 1
 /*
  * Level 2:  Used to further verify/debug the IC
  *    Output to IC
  */
-#define CY_DBG_LVL_2			2
+#define CY_DBG_LVL_2 2
 /*
  * Level 3:  Used to further verify/debug the driver
  *    Driver internals
  */
-#define CY_DBG_LVL_3			3
-#define CY_DBG_LVL_MAX			CY_DBG_LVL_3
+#define CY_DBG_LVL_3 3
+#define CY_DBG_LVL_MAX CY_DBG_LVL_3
 
 #define cyttsp_dbg(ts, l, f, a...) {\
 	if ((ts->bus_ops->tsdebug) >= l) \

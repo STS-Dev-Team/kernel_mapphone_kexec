@@ -940,14 +940,11 @@ struct ct405_platform_data mp_ct405_pdata = {
 	.ct405_prox_covered_offset = 0x008c,
 	.ct405_prox_uncovered_offset = 0x0046,
 	.ct405_prox_recalibrate_offset = 0x0046,
-	.ct405_prox_pulse_count = 0x02,
 
 	.ct406_prox_saturation_threshold = 0x0208,
 	.ct406_prox_covered_offset = 0x008c,
 	.ct406_prox_uncovered_offset = 0x0046,
 	.ct406_prox_recalibrate_offset = 0x0046,
-	.ct406_prox_pulse_count = 0x02,
-	.ct406_prox_offset = 0x00,
 };
 
 static int __init ct405_init(struct device_node *node)
@@ -978,10 +975,6 @@ static int __init ct405_init(struct device_node *node)
 	if (prop && len)
 		mp_ct405_pdata.ct405_prox_recalibrate_offset = *(u16 *)prop;
 
-	prop = of_get_property(node, "ct405_prox_pulse_count", &len);
-	if (prop && len)
-		mp_ct405_pdata.ct405_prox_pulse_count = *(u8 *)prop;
-
 	prop = of_get_property(node, "ct406_prox_saturation_threshold", &len);
 	if (prop && len)
 		mp_ct405_pdata.ct406_prox_saturation_threshold = *(u16 *)prop;
@@ -997,14 +990,6 @@ static int __init ct405_init(struct device_node *node)
 	prop = of_get_property(node, "ct406_prox_recalibrate_offset", &len);
 	if (prop && len)
 		mp_ct405_pdata.ct406_prox_recalibrate_offset = *(u16 *)prop;
-
-	prop = of_get_property(node, "ct406_prox_pulse_count", &len);
-	if (prop && len)
-		mp_ct405_pdata.ct406_prox_pulse_count = *(u8 *)prop;
-
-	prop = of_get_property(node, "ct406_prox_offset", &len);
-	if (prop && len)
-		mp_ct405_pdata.ct406_prox_offset = *(u8 *)prop;
 
 	prop = of_get_property(node, "regulator", &len);
 	if (prop && len) {

@@ -58,10 +58,6 @@
 #include "u_ether.c"
 #include "f_usbnet.c"
 
-#ifdef CONFIG_MOT_FEAT_SPY
-#include "f_spy.h"
-#endif
-
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Android Composite USB Driver");
 MODULE_LICENSE("GPL");
@@ -144,12 +140,6 @@ static void android_unbind_config(struct usb_configuration *c);
 #define STRING_PRODUCT_IDX		1
 #define STRING_SERIAL_IDX		2
 
-#ifdef CONFIG_MOT_FEAT_SPY
-#define STRING_MANUFACTURER_SPY_IDX     3
-#define STRING_PRODUCT_SPY_IDX          4
-#define STRING_SERIAL_SPY_IDX           5
-#endif
-
 static char manufacturer_string[256];
 static char product_string[256];
 static char serial_string[256];
@@ -161,11 +151,6 @@ static struct usb_string strings_dev[] = {
 	[STRING_MANUFACTURER_IDX].s = manufacturer_string,
 	[STRING_PRODUCT_IDX].s = product_string,
 	[STRING_SERIAL_IDX].s = serial_string,
-#ifdef CONFIG_MOT_FEAT_SPY
-	[STRING_MANUFACTURER_SPY_IDX].s = "ST-Ericsson",
-	[STRING_PRODUCT_SPY_IDX].s = "ST-Ericsson TD-HSPA Driver",
-	[STRING_SERIAL_SPY_IDX].s = "000000-00-0000000",
-#endif
 	{  }			/* end of list */
 };
 
@@ -476,41 +461,6 @@ static struct android_usb_function adb_function = {
 	.cleanup	= adb_function_cleanup,
 	.bind_config	= adb_function_bind_config,
 };
-
-
-#ifdef CONFIG_MOT_FEAT_SPY
-static int spy_function_init(struct android_usb_function *f,
-			struct usb_composite_dev *cdev)
-{
-	return spy_init(cdev);
-}
-
-static void spy_function_cleanup(struct android_usb_function *f)
-{
-	spy_cleanup();
-}
-
-static int spy_function_bind_config(struct android_usb_function *f,
-			struct usb_configuration *c)
-{
-	return spy_bind_config(c, 0);
-}
-
-static int spy_function_ctrlrequest(struct android_usb_function *f,
-			struct usb_composite_dev *cdev,
-			const struct usb_ctrlrequest *c)
-{
-	return spy_ctrlrequest(cdev, c);
-}
-
-static struct android_usb_function spy_function = {
-	.name       = "spy",
-	.init       = spy_function_init,
-	.cleanup    = spy_function_cleanup,
-	.bind_config    = spy_function_bind_config,
-	.ctrlrequest	= spy_function_ctrlrequest,
-};
-#endif
 
 
 #define MAX_ACM_INSTANCES 4
@@ -1115,9 +1065,6 @@ static struct android_usb_function *supported_functions[] = {
 	&mass_storage_function,
 	&accessory_function,
 	&usbnet_function,
-#ifdef CONFIG_MOT_FEAT_SPY
-	&spy_function,
-#endif
 	NULL
 };
 
@@ -1373,6 +1320,7 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 
 		/* update values in composite driver's copy of device descriptor */
 		cdev->desc.idVendor = device_desc.idVendor;
+
 		functions_len = functions_show(pdev, NULL, get_buf);
 		end_char_addr = &get_buf[0] + functions_len - 1;
 		*end_char_addr = 0;
@@ -1385,26 +1333,6 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 		cdev->desc.bDeviceClass = device_desc.bDeviceClass;
 		cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
 		cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
-
-#ifdef CONFIG_MOT_FEAT_SPY
-		/* workaround for spy tracer.*/
-		if (!strcmp(get_buf, "spy")) {
-			cdev->desc.iManufacturer =
-				strings_dev[STRING_MANUFACTURER_SPY_IDX].id;
-			cdev->desc.iProduct =
-				strings_dev[STRING_PRODUCT_SPY_IDX].id;
-			cdev->desc.iSerialNumber =
-				strings_dev[STRING_SERIAL_SPY_IDX].id;
-			cdev->desc.bcdDevice = __constant_cpu_to_le16(0x0100);
-			cdev->desc.bDeviceClass = USB_CLASS_COMM;
-			cdev->desc.bDeviceSubClass = USB_CLASS_PER_INTERFACE;
-			cdev->desc.bDeviceProtocol = USB_CLASS_PER_INTERFACE;
-
-			android_config_driver.iConfiguration = 0;
-			android_config_driver.bmAttributes = USB_CONFIG_ATT_ONE;
-			android_config_driver.bMaxPower = 0x02;
-		}
-#endif
 		usb_add_config(cdev, &android_config_driver,
 					android_bind_config);
 		usb_gadget_connect(cdev->gadget);
@@ -1600,23 +1528,6 @@ static int android_bind(struct usb_composite_dev *cdev)
 		return id;
 	strings_dev[STRING_SERIAL_IDX].id = id;
 	device_desc.iSerialNumber = id;
-
-#ifdef CONFIG_MOT_FEAT_SPY
-	id = usb_string_id(cdev);
-	if (id < 0)
-		return id;
-	strings_dev[STRING_MANUFACTURER_SPY_IDX].id = id;
-
-	id = usb_string_id(cdev);
-	if (id < 0)
-		return id;
-	strings_dev[STRING_PRODUCT_SPY_IDX].id = id;
-
-	id = usb_string_id(cdev);
-	if (id < 0)
-		return id;
-	strings_dev[STRING_SERIAL_SPY_IDX].id = id;
-#endif
 
 	gcnum = usb_gadget_controller_number(gadget);
 	if (gcnum >= 0)
