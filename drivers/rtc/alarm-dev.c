@@ -25,10 +25,6 @@
 #include <linux/uaccess.h>
 #include <linux/wakelock.h>
 
-#ifdef CONFIG_POWEROFF_ALARM
-#include <linux/rtc.h>
-#endif
-
 #define ANDROID_ALARM_PRINT_INFO (1U << 0)
 #define ANDROID_ALARM_PRINT_IO (1U << 1)
 #define ANDROID_ALARM_PRINT_INT (1U << 2)
@@ -70,14 +66,6 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct timespec tmp_time;
 	enum android_alarm_type alarm_type = ANDROID_ALARM_IOCTL_TO_TYPE(cmd);
 	uint32_t alarm_type_mask = 1U << alarm_type;
-#ifdef CONFIG_POWEROFF_ALARM
-	struct rtc_time rtc_cur_rtc_time;
-	unsigned long rtc_alarm_time;
-	unsigned long rtc_cur_time;
-	struct timespec rtc_delta;
-	struct timespec wall_time;
-	struct rtc_wkalrm rtc_alarm;
-#endif
 
 	if (alarm_type >= ANDROID_ALARM_TYPE_COUNT)
 		return -EINVAL;
@@ -110,19 +98,6 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 		alarm_enabled &= ~alarm_type_mask;
 		spin_unlock_irqrestore(&alarm_slock, flags);
-
-#ifdef CONFIG_POWEROFF_ALARM
-		if (alarm_type == ANDROID_ALARM_POWEROFF_WAKEUP) {
-			rtc_alarm.enabled = 0;
-			rtc_time_to_tm(0, &rtc_alarm.time);
-			rv = rtc_set_alarm(alarm_rtc_dev, &rtc_alarm);
-			if (rv < 0) {
-				pr_alarm(INFO, "pwf-alarm: ioctl_clear "
-					"rtc_set_alarm failed.\n");
-				goto err1;
-			}
-		}
-#endif
 		break;
 
 	case ANDROID_ALARM_SET_OLD:
@@ -150,37 +125,6 @@ from_old_alarm_set:
 			timespec_to_ktime(new_alarm_time),
 			timespec_to_ktime(new_alarm_time));
 		spin_unlock_irqrestore(&alarm_slock, flags);
-#ifdef CONFIG_POWEROFF_ALARM
-		if (alarm_type == ANDROID_ALARM_POWEROFF_WAKEUP) {
-
-			rtc_read_time(alarm_rtc_dev, &rtc_cur_rtc_time);
-			pr_alarm(INFO, "pwf-alarm: currect rtc time is "
-				"%d:%02d:%02d\n",
-				rtc_cur_rtc_time.tm_hour,
-				rtc_cur_rtc_time.tm_min,
-				rtc_cur_rtc_time.tm_sec);
-			getnstimeofday(&wall_time);
-			rtc_tm_to_time(&rtc_cur_rtc_time, &rtc_cur_time);
-			set_normalized_timespec(&rtc_delta,
-				wall_time.tv_sec - rtc_cur_time,
-				wall_time.tv_nsec);
-			rtc_alarm_time =
-				 timespec_sub(new_alarm_time, rtc_delta).tv_sec;
-			rtc_time_to_tm(rtc_alarm_time, &rtc_alarm.time);
-			pr_alarm(INFO, "pwf-alarm: new alarm to be set is "
-				"%d:%02d:%02d\n",
-				rtc_alarm.time.tm_hour,
-				rtc_alarm.time.tm_min,
-				rtc_alarm.time.tm_sec);
-			rtc_alarm.enabled = 1;
-			rv =  rtc_set_alarm(alarm_rtc_dev, &rtc_alarm);
-			if (rv < 0) {
-				pr_alarm(INFO, "pwf-alarm: ioctl_set "
-					"rtc_set_alarm failed.\n");
-				goto err1;
-			}
-		}
-#endif
 		if (ANDROID_ALARM_BASE_CMD(cmd) != ANDROID_ALARM_SET_AND_WAIT(0)
 		    && cmd != ANDROID_ALARM_SET_AND_WAIT_OLD)
 			break;
@@ -221,15 +165,6 @@ from_old_alarm_set:
 		case ANDROID_ALARM_RTC_WAKEUP:
 		case ANDROID_ALARM_RTC:
 			getnstimeofday(&tmp_time);
-			break;
-		case ANDROID_ALARM_POWEROFF_WAKEUP:
-#ifdef CONFIG_POWEROFF_ALARM
-			rtc_read_alarm(alarm_rtc_dev, &rtc_alarm);
-			rtc_tm_to_time(&rtc_alarm.time, &tmp_time.tv_sec);
-			tmp_time.tv_nsec = 0;
-#else
-			getnstimeofday(&tmp_time);
-#endif
 			break;
 		case ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP:
 		case ANDROID_ALARM_ELAPSED_REALTIME:

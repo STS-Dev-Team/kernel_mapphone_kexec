@@ -278,10 +278,6 @@ extern int rtc_hctosys_ret;
 #define rtc_hctosys_ret -ENODEV
 #endif
 
-#ifdef CONFIG_POWEROFF_ALARM
-extern struct rtc_device *alarm_rtc_dev;
-#endif
-
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_RTC_H_ */

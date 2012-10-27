@@ -1044,7 +1044,8 @@ static void detection_work(struct work_struct *work)
 			pr_cpcap_usb_det(STATUS,
 				"detection_work: FACTORY Identified\n");
 
-			if ((pdata->factory_kill->force_factory_kill))
+			if (!(data->power_up) &&
+			    (pdata->factory_kill->force_factory_kill))
 				pdata->factory_kill->force_factory_kill(1);
 
 #ifdef CONFIG_USB_TESTING_POWER

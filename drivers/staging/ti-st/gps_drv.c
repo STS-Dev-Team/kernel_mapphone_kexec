@@ -82,7 +82,7 @@ enum {
 struct gpsdrv_event_hdr {
 	uint8_t opcode;
 	uint16_t plen;
-} __packed;
+} __attribute__ ((packed));
 
 /*
  * struct gpsdrv_data - gps internal driver data

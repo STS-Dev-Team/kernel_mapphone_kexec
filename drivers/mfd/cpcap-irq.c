@@ -244,12 +244,10 @@ static void pwrkey_handler(enum cpcap_irqs irq, void *data)
 		 * both the press and the release. */
 		wake_lock_timeout(&pwrkey_data->wake_lock,
 				  msecs_to_jiffies(200));
-		if (!delayed_work_pending(&pwrkey_data->pwrkey_delayed_work)) {
+		if (!delayed_work_pending(&pwrkey_data->pwrkey_delayed_work))
 			cpcap_broadcast_key_event(cpcap, KEY_END, PWRKEY_PRESS);
-			cpcap_broadcast_key_event(cpcap, KEY_END, PWRKEY_RELEASE);
-			schedule_delayed_work(&pwrkey_data->pwrkey_delayed_work,
-						msecs_to_jiffies(100));
-		}
+		schedule_delayed_work(&pwrkey_data->pwrkey_delayed_work,
+				      msecs_to_jiffies(100));
 	}
 	cpcap_irq_unmask(cpcap, CPCAP_IRQ_ON);
 }
@@ -260,8 +258,7 @@ static void pwrkey_delayed_work_func(struct work_struct *pwrkey_delayed_work)
 		container_of(pwrkey_delayed_work, struct pwrkey_data,
 			     pwrkey_delayed_work.work);
 
-	/* cpcap_broadcast_key_event(pwrkey_data->cpcap, KEY_END, PWRKEY_RELEASE); */
-	printk("Got 2 continuous power key release\n");
+	cpcap_broadcast_key_event(pwrkey_data->cpcap, KEY_END, PWRKEY_RELEASE);
 }
 
 static int pwrkey_init(struct cpcap_device *cpcap)

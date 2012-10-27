@@ -512,11 +512,6 @@ int msdos_partition(struct parsed_partitions *state)
 			 */
 			sector_t n = 2;
 			n = min(size, max(sector_size, n));
-
-			/* Give the correct value for updating EBR. */
-			if (n == 2)
-				n = 1024;
-
 			put_partition(state, slot, start, n);
 
 			strlcat(state->pp_buf, " <", PAGE_SIZE);

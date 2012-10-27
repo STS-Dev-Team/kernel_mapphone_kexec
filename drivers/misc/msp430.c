@@ -185,9 +185,7 @@ struct msp430_data {
 	struct input_dev *input_dev;
 	struct input_dev *input_dev_b;
 	struct work_struct irq_work;
-	struct work_struct recovery_work;
 	struct workqueue_struct *irq_work_queue;
-	struct workqueue_struct *recovery_work_queue;
 	struct work_struct passive_work;
 	struct wake_lock wakelock;
 	struct timer_cascade_root *waketimer;
@@ -368,8 +366,6 @@ static int msp430_i2c_write_read(struct msp430_data *ps_msp430, u8 *buf,
 	} while ((err != 2) && (++tries < I2C_RETRIES));
 	if (err != 2) {
 		dev_err(&ps_msp430->client->dev, "read transfer error\n");
-		queue_work(ps_msp430->recovery_work_queue,
-			&ps_msp430->recovery_work);
 		err = -EIO;
 	} else {
 		err = 0;
@@ -407,12 +403,9 @@ static int msp430_i2c_read(struct msp430_data *ps_msp430, u8 *buf, int len)
 	} while ((err < 0) && (++tries < I2C_RETRIES));
 	if (err < 0) {
 		dev_err(&ps_msp430->client->dev, "read transfer error\n");
-		queue_work(ps_msp430->recovery_work_queue,
-		&ps_msp430->recovery_work);
-
 		err = -EIO;
 	} else {
-		KDEBUG("Read was successsful:\n");
+		KDEBUG("Read was successsful: \n");
 		for (tries = 0; tries < err ; tries++)
 			KDEBUG("MSP430 %02x", buf[tries]);
 	}
@@ -436,12 +429,9 @@ static int msp430_i2c_write(struct msp430_data *ps_msp430, u8 * buf, int len)
 
 	if (err < 0) {
 		dev_err(&ps_msp430->client->dev, "msp430: write error\n");
-		queue_work(ps_msp430->recovery_work_queue,
-			&ps_msp430->recovery_work);
-
 		err = -EIO;
 	} else {
-		KDEBUG("MSP430 msp430 i2c write successful\n");
+		KDEBUG("MSP430 msp430 i2c write successful \n");
 		err = 0;
 	}
 	return err;
@@ -1182,11 +1172,6 @@ static long msp430_misc_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 		break;
 	case MSP430_IOCTL_SET_ALGOS:
-		if (g_sensor_state == 0) {
-			KDEBUG("ALGOS set before enable sensors\n");
-			err = -EFAULT;
-			break;
-		}
 		byte = 0;
 		if (copy_from_user(&byte, argp, sizeof(byte))) {
 			KDEBUG("copy from user returned error\n");
@@ -1208,11 +1193,6 @@ static long msp430_misc_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 		break;
 	case MSP430_IOCTL_SET_RADIAL_THR:
-		if (g_sensor_state == 0) {
-			KDEBUG("RADIAL_THR set before enable sensors\n");
-			err = -EFAULT;
-			break;
-		}
 		byte = 0;
 		if (copy_from_user(&addr, argp, sizeof(addr))) {
 			KDEBUG("copy from user returned error\n");
@@ -1250,11 +1230,6 @@ static long msp430_misc_ioctl(struct file *file, unsigned int cmd,
 		err = msp430_i2c_write(ps_msp430, msp_cmdbuff, 2);
 		break;
 	case MSP430_IOCTL_SET_MOTION_DUR:
-		if (g_sensor_state == 0) {
-			KDEBUG("MOTION_DUR is set before enable sensors\n");
-			err = -EFAULT;
-			break;
-		}
 		if (copy_from_user(&addr, argp, sizeof(addr))) {
 			KDEBUG("copy from user returned error\n");
 			return -EFAULT;
@@ -1285,11 +1260,6 @@ static long msp430_misc_ioctl(struct file *file, unsigned int cmd,
 		err = msp430_i2c_write(ps_msp430, msp_cmdbuff, 2);
 		break;
 	case MSP430_IOCTL_SET_ZRMOTION_DUR:
-		if (g_sensor_state == 0) {
-			KDEBUG("ZRMOTION_DUR is set before enable sensors\n");
-			err = -EFAULT;
-			break;
-		}
 		if (copy_from_user(&addr, argp, sizeof(addr))) {
 			KDEBUG("copy from user returned error\n");
 			return -EFAULT;
@@ -1524,72 +1494,6 @@ int waketimercallback(void)
 	return 0;
 }
 
-static void msp430_recovery_work_func(struct work_struct *work)
-{
-	struct msp430_data *ps_msp430 = container_of(work,
-			struct msp430_data, recovery_work);
-
-	int err;
-
-	if (ps_msp430->mode == BOOTMODE)
-		return;
-
-	pr_info("%s: ", __func__);
-	mutex_lock(&ps_msp430->lock);
-
-	/* reset MSP */
-	pr_info(" get lock, try to reset msp430\n");
-	switch_msp430_mode(NORMALMODE);
-
-	msleep(50);
-
-	/* resume sensors after recovery */
-	pr_info(" resume sensors after recovery\n");
-	msp_cmdbuff[0] = MODULE_CONFIG;
-	msp_cmdbuff[1] = g_sensor_state;
-
-	err = msp430_i2c_write(ps_msp430, msp_cmdbuff, 2);
-
-	mutex_unlock(&ps_msp430->lock);
-}
-
-static int msp430_enter_suspend_resume(struct msp430_data *ps_msp430,
-	u8 *buf, int len)
-{
-	int err = 0;
-	int tries = 0;
-
-	if (ps_msp430->mode == FACTORYMODE)
-		return err;
-
-	tries = 0;
-	do {
-		err = i2c_master_send(ps_msp430->client, buf, len);
-		if (err < 0)
-			msleep_interruptible(I2C_RETRY_DELAY);
-	} while ((err < 0) && (++tries < I2C_RETRIES));
-
-	if (err < 0) {
-		dev_err(&ps_msp430->client->dev, "msp430: write error\n");
-
-		/* reset MSP */
-		pr_info("get lock, try to reset msp430 when suspend/resume\n");
-		switch_msp430_mode(NORMALMODE);
-		msleep(50);
-
-		tries = 0;
-		do {
-			err = i2c_master_send(ps_msp430->client, buf, len);
-			if (err < 0)
-				msleep_interruptible(I2C_RETRY_DELAY);
-		} while ((err < 0) && (++tries < I2C_RETRIES));
-	} else {
-		KDEBUG("MSP430 msp430 i2c write successful\n");
-		err = 0;
-	}
-	return err;
-}
-
 static int msp430_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
@@ -1646,23 +1550,12 @@ static int msp430_probe(struct i2c_client *client,
 
 	INIT_WORK(&ps_msp430->irq_work, msp430_irq_work_func);
 	INIT_WORK(&ps_msp430->passive_work, msp430_passive_work_func);
-	INIT_WORK(&ps_msp430->recovery_work, msp430_recovery_work_func);
 	ps_msp430->irq_work_queue = create_singlethread_workqueue("msp430_wq");
 	if (!ps_msp430->irq_work_queue) {
 		err = -ENOMEM;
 		dev_err(&client->dev, "cannot create work queue: %d\n", err);
 		goto err1;
 	}
-	ps_msp430->recovery_work_queue
-		= create_singlethread_workqueue("msp430_recovery");
-	if (!ps_msp430->recovery_work_queue) {
-		err = -ENOMEM;
-		dev_err(&client->dev,
-			"cannot create recovery work queue: %d\n", err);
-		destroy_workqueue(ps_msp430->irq_work_queue);
-		goto err1;
-	}
-
 	ps_msp430->pdata = kmalloc(sizeof(*ps_msp430->pdata), GFP_KERNEL);
 	if (ps_msp430->pdata == NULL) {
 		err = -ENOMEM;
@@ -1741,7 +1634,6 @@ err4:
 err3:
 	kfree(ps_msp430->pdata);
 err2:
-	destroy_workqueue(ps_msp430->recovery_work_queue);
 	destroy_workqueue(ps_msp430->irq_work_queue);
 err1:
 	mutex_unlock(&ps_msp430->lock);
@@ -1764,7 +1656,6 @@ static int __devexit msp430_remove(struct i2c_client *client)
 		ps_msp430->pdata->exit();
 	kfree(ps_msp430->pdata);
 	destroy_workqueue(ps_msp430->irq_work_queue);
-	destroy_workqueue(ps_msp430->recovery_work_queue);
 	mutex_destroy(&ps_msp430->lock);
 	wake_lock_destroy(&ps_msp430->wakelock);
 #ifdef  CONFIG_QUICK_WAKEUP
@@ -1788,7 +1679,7 @@ static int msp430_resume(struct i2c_client *client)
 		/* restore traditional sensor data */
 		msp_cmdbuff[0] = MODULE_CONFIG;
 		msp_cmdbuff[1] = g_sensor_state;
-		msp430_enter_suspend_resume(ps_msp430, msp_cmdbuff, 2);
+		msp430_i2c_write(ps_msp430, msp_cmdbuff, 2);
 	}
 
 	mutex_unlock(&ps_msp430->lock);
@@ -1804,7 +1695,7 @@ static int msp430_suspend(struct i2c_client *client, pm_message_t mesg)
 		/* turn off traditional sensor data */
 		msp_cmdbuff[0] = MODULE_CONFIG;
 		msp_cmdbuff[1] = 0;
-		msp430_enter_suspend_resume(ps_msp430, msp_cmdbuff, 2);
+		msp430_i2c_write(ps_msp430, msp_cmdbuff, 2);
 	}
 
 	mutex_unlock(&ps_msp430->lock);

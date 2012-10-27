@@ -141,13 +141,13 @@ struct hci_command_hdr {
 	uint8_t prefix;
 	uint16_t opcode;
 	uint8_t plen;
-} __packed;
+} __attribute__ ((packed));
 
 /* Header structure for HCI event packet */
 struct evt_cmd_complete {
 	uint8_t ncmd;
 	uint16_t opcode;
-} __packed;
+} __attribute__ ((packed));
 
 /* FM Character driver data */
 struct fmdrv_chr_ops {
@@ -498,6 +498,50 @@ static long fm_rx_task(struct fmdrv_chr_ops *fm_chr_dev)
 		spin_unlock_irqrestore(&fm_chr_dev->lock, flags);
 		return FM_CHR_DRV_ERR_FAILURE;
 	}
+#if 0
+	/* Dequeue the skb received from the FM_ST interface */
+	skb = skb_dequeue(&fm_chr_dev->rx_q);
+	if (skb == NULL) {
+		FM_CHR_DRV_ERR(" Dequeued skb from Rx queue is NULL ");
+		spin_unlock_irqrestore(&fm_chr_dev->lock, flags);
+		return FM_CHR_DRV_ERR_FAILURE;
+	}
+
+	/* Send a signal to TI FM stack when an Interrupt packet arrives */
+	if (skb->data[CHAN8_RESP_FM_OPCODE_POS] == CHAN8_FM_INTERRUPT) {
+		FM_CHR_DRV_VER(" Interrupt arrived: ");
+
+#ifdef VERBOSE
+		for (len = 0; ((skb) && (len < skb->len)); len++)
+			printk(KERN_INFO " 0x%02x ", skb->data[len]);
+		printk("\n");
+#endif
+
+		kfree_skb(skb);
+		/* kill_fasync here - Sends the signal. Check if the queue is
+		 * empty. If not, it means that command complete response for
+		 * the previous command is not sent to the stack. Don't send
+		 * the Signal. Set the SIGNAL_PENDING bit. This bit is cleared
+		 * in the read() of the stack, when it reads the command
+		 * complete response.
+		 */
+		if (likely(skb_queue_empty(&fm_chr_dev->rx_q))) {
+			/* Should come here most often */
+			kill_fasync(&fm_chr_dev->fm_fasync, SIGIO, POLLIN);
+			clear_bit(SIGNAL_PENDING, &fm_chr_dev->state_flags);
+		} else {
+			FM_CHR_DRV_VER(" signal not sent..");
+			set_bit(SIGNAL_PENDING, &fm_chr_dev->state_flags);
+		}
+		spin_unlock_irqrestore(&fm_chr_dev->lock, flags);
+		return FM_CHR_DRV_SUCCESS;
+	}
+
+	/* Queue it back to the queue if the received packet
+	 * is not an interrupt packet
+	 */
+	skb_queue_head(&fm_chr_dev->rx_q, skb);
+#endif
 	wake_up_interruptible(&fm_chr_dev->fm_data_q);
 
 	spin_unlock_irqrestore(&fm_chr_dev->lock, flags);

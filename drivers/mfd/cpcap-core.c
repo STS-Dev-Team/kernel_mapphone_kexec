@@ -28,9 +28,6 @@
 #include <linux/notifier.h>
 #include <linux/delay.h>
 #include <asm/bootinfo.h>
-#ifdef CONFIG_POWEROFF_ALARM
-#include <linux/of.h>
-#endif
 
 struct cpcap_driver_info {
 	struct list_head list;
@@ -133,12 +130,6 @@ static int cpcap_reboot(struct notifier_block *this, unsigned long code,
 	char *mode = cmd;
 	unsigned short value;
 	unsigned short counter = 0;
-#ifdef CONFIG_POWEROFF_ALARM
-	struct device_node *node;
-	const void *prop;
-	int feature_poweroff_alarm = 0;
-	int size;
-#endif
 
 	struct cpcap_platform_data *pdata = misc_cpcap->spi->dev.platform_data;
 
@@ -176,22 +167,6 @@ static int cpcap_reboot(struct notifier_block *this, unsigned long code,
 				result = NOTIFY_BAD;
 			}
 		}
-
-#ifdef CONFIG_POWEROFF_ALARM
-		if (mode != NULL && !strncmp("outofchargealarm", mode, 17)) {
-			/* Set the outofchargealarm bit in the cpcap */
-			ret = cpcap_regacc_write(misc_cpcap, CPCAP_REG_VAL1,
-				CPCAP_BIT_OUT_CHARGE_ONLY_ALARM,
-				CPCAP_BIT_OUT_CHARGE_ONLY_ALARM);
-			if (ret) {
-				dev_err(&(misc_cpcap->spi->dev),
-					"outofchargealarm cpcap set failure.\n");
-				result = NOTIFY_BAD;
-			}
-
-			printk(KERN_INFO "Set the outofchargealarm bit.\n");
-		}
-#endif
 
 		/* Check if we are starting recovery mode */
 		if (mode != NULL && !strncmp("recovery", mode, 9)) {
@@ -234,17 +209,6 @@ static int cpcap_reboot(struct notifier_block *this, unsigned long code,
 				"outofcharge cpcap set failure.\n");
 			result = NOTIFY_BAD;
 		}
-#ifdef CONFIG_POWEROFF_ALARM
-		ret = cpcap_regacc_write(misc_cpcap, CPCAP_REG_VAL1,
-					 0,
-					 CPCAP_BIT_OUT_CHARGE_ONLY_ALARM);
-		if (ret) {
-			dev_err(&(misc_cpcap->spi->dev),
-				"outofchargealarm cpcap set failure.\n");
-			result = NOTIFY_BAD;
-		}
-		printk(KERN_INFO "Clear the outofchargealarm bit\n");
-#endif
 
 		/* Clear the soft reset bit in the cpcap */
 		ret = cpcap_regacc_write(misc_cpcap, CPCAP_REG_VAL1, 0,
@@ -302,24 +266,8 @@ static int cpcap_reboot(struct notifier_block *this, unsigned long code,
 	cpcap_regacc_write(misc_cpcap, CPCAP_REG_CRM, 0, 0x3FFF);
 
 	/* always mask TODAM interrupt due to auto power on issue */
-#ifdef CONFIG_POWEROFF_ALARM
-	/* do not mask TODAM if support poweroff alarm feature */
-	node = of_find_node_by_path("/System@0/Feature@0");
-
-	if (node) {
-		prop = of_get_property(node, "feature_poweroff_alarm", &size);
-		if (prop && size) {
-			feature_poweroff_alarm = *(u8 *)prop;
-			pr_debug("%s power off alarm in product",
-				feature_poweroff_alarm ? "Enable" : "Disable");
-		}
-		of_node_put(node);
-	}
-
-	if (feature_poweroff_alarm == 0)
-#endif
-		cpcap_regacc_write(misc_cpcap, CPCAP_REG_INTM3,
-			CPCAP_BIT_TODA_M, CPCAP_BIT_TODA_M);
+	cpcap_regacc_write(misc_cpcap, CPCAP_REG_INTM3, CPCAP_BIT_TODA_M,
+		CPCAP_BIT_TODA_M);
 	mdelay(100);
 
 	return result;

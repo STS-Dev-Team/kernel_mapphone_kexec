@@ -1765,9 +1765,9 @@ err_dead_binder:
 err_invalid_target_handle:
 err_no_context_mgr_node:
 	binder_debug(BINDER_DEBUG_FAILED_TRANSACTION,
-		     "binder: %d:%d transaction failed %d-%d, size %zd-%zd\n",
-				 proc->pid, thread->pid, return_error,
-		     thread->return_error, tr->data_size, tr->offsets_size);
+		     "binder: %d:%d transaction failed %d, size %zd-%zd\n",
+		     proc->pid, thread->pid, return_error,
+		     tr->data_size, tr->offsets_size);
 
 	{
 		struct binder_transaction_log_entry *fe;

@@ -95,9 +95,6 @@ struct omap4_keypad {
 	unsigned short keymap[];
 };
 
-static DEFINE_MUTEX(kp_enable_mutex);
-static int kp_wake_enable;
-
 static bool omap4_keypad_validate_event(struct omap4_keypad *keypad_data,
 						unsigned int code,
 						unsigned char pressed)
@@ -218,33 +215,6 @@ static void omap4_keypad_timer(unsigned long data)
 	/* enable interrupts */
 	__raw_writel(irq_mask, keypad_data->base + OMAP4_KBD_IRQENABLE);
 }
-
-static ssize_t omap_kp_enable_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", kp_wake_enable);
-}
-
-static ssize_t omap_kp_enable_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	int state;
-
-	if (sscanf(buf, "%u", &state) != 1)
-		return -EINVAL;
-
-	if ((state != 1) && (state != 0))
-		return -EINVAL;
-
-	mutex_lock(&kp_enable_mutex);
-	kp_wake_enable = state;
-	mutex_unlock(&kp_enable_mutex);
-
-	return strnlen(buf, count);
-}
-
-static DEVICE_ATTR(wakeup_enable, S_IRUGO | S_IWUSR, omap_kp_enable_show,
-		omap_kp_enable_store);
 
 static int omap4_keypad_open(struct input_dev *input)
 {
@@ -423,10 +393,6 @@ static int __devinit omap4_keypad_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, keypad_data);
-
-	kp_wake_enable = 0;
-	if (device_create_file(&pdev->dev, &dev_attr_wakeup_enable) < 0)
-		device_remove_file(&pdev->dev, &dev_attr_wakeup_enable);
 	return 0;
 
 err_pm_disable:
@@ -464,14 +430,12 @@ static int __devexit omap4_keypad_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-
 static int omap4_keypad_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct omap4_keypad *keypad_data = platform_get_drvdata(pdev);
 
-	if (keypad_data->keypad_pad_wkup && kp_wake_enable)
+	if (keypad_data->keypad_pad_wkup)
 		keypad_data->keypad_pad_wkup(1);
 
 	return 0;
@@ -481,7 +445,7 @@ static int omap4_keypad_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct omap4_keypad *keypad_data = platform_get_drvdata(pdev);
 
-	if (keypad_data->keypad_pad_wkup && kp_wake_enable)
+	if (keypad_data->keypad_pad_wkup)
 		keypad_data->keypad_pad_wkup(0);
 
 	return 0;

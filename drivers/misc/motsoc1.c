@@ -443,8 +443,6 @@ static int motsoc1_misc_close(struct inode *inode, struct file *file)
 	KDEBUG("MOTSOC1 motsoc1_misc_close\n");
 	KDEBUG("release gpio 83\n");
 	gpio_free(motsoc1_misc_data->pdata->gpio_reset);
-	/* turn off MCLK */
-	motsoc1_device_turn_off_mclk(motsoc1_misc_data);
 	return err;
 }
 

@@ -123,12 +123,6 @@ config RTC_INTF_ALARM_DEV
 	help
 	  Exports the alarm interface to user-space.
 
-config POWEROFF_ALARM
-	bool "Power off alarm"
-	depends on RTC_INTF_ALARM_DEV && MFD_CPCAP
-	default n
-	help
-	  It's used for supporting alarm power on.
 config RTC_INTF_SECCLKD
 	tristate "RTC SECCLKD"
 	default n

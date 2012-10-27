@@ -40,8 +40,6 @@
 #include <linux/gfp.h>
 #include <linux/module.h>
 
-#define TCP_MAX_SEGMENT_SIZE_LIMIT 1372
-
 /* People can turn this off for buggy TCP's found in printers etc. */
 int sysctl_tcp_retrans_collapse __read_mostly = 1;
 
@@ -120,15 +118,6 @@ static __u16 tcp_advertise_mss(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct dst_entry *dst = __sk_dst_get(sk);
 	int mss = tp->advmss;
-
-	/*
-	 * Limit mss to be not bigger than 1372
-	 * to solve compatibility issue
-	 */
-	if (mss > TCP_MAX_SEGMENT_SIZE_LIMIT) {
-		mss = TCP_MAX_SEGMENT_SIZE_LIMIT;
-		tp->advmss = mss;
-	}
 
 	if (dst) {
 		unsigned int metric = dst_metric_advmss(dst);
@@ -1250,13 +1239,6 @@ unsigned int tcp_sync_mss(struct sock *sk, u32 pmtu)
 	icsk->icsk_pmtu_cookie = pmtu;
 	if (icsk->icsk_mtup.enabled)
 		mss_now = min(mss_now, tcp_mtu_to_mss(sk, icsk->icsk_mtup.search_low));
-	/*
-	 * Limit mss to be not bigger than 1372
-	 * to solve compatiblity issue
-	 */
-	if (mss_now > TCP_MAX_SEGMENT_SIZE_LIMIT)
-		mss_now = TCP_MAX_SEGMENT_SIZE_LIMIT;
-
 	tp->mss_cache = mss_now;
 
 	return mss_now;

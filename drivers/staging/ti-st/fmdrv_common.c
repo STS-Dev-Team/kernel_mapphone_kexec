@@ -1780,7 +1780,8 @@ static int fm_power_up(struct fmdrv_ops *fmdev, unsigned char fw_option)
 	}
 
 	/* Allow the chip to settle down in Channel-8 mode */
-	msleep(20);
+	msleep(5);
+
 	ret = fmc_send_cmd(fmdev, ASIC_ID_GET, NULL, sizeof(asic_id),
 			   &fmdev->maintask_completion, &asic_id,
 			   &resp_len);

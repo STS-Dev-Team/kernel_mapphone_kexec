@@ -410,9 +410,6 @@ static int __devinit cpcap_rtc_probe(struct platform_device *pdev)
 	init_waitqueue_head(&rtc->wait);
 	rtc_ptr = rtc;
 #endif
-#ifdef CONFIG_POWEROFF_ALARM
-	cpcap_irq_clear(rtc->cpcap, CPCAP_IRQ_TODA);
-#endif
 	cpcap_irq_register(rtc->cpcap, CPCAP_IRQ_TODA, cpcap_rtc_irq, rtc);
 	cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_TODA);
 

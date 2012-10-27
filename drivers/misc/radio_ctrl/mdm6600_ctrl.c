@@ -491,6 +491,7 @@ static int __devinit mdm6600_ctrl_probe(struct platform_device *pdev)
 	}
 
 	mdm_ctrl.pdata->bootmode = BOOTMODE_NORMAL;
+	mdm_ctrl_powerup();
 	update_bp_status();
 	register_reboot_notifier(&mdm6600_reboot_notifier);
 

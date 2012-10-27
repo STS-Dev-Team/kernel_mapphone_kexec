@@ -160,13 +160,6 @@ config TOUCHSCREEN_CYTTSP3
 
 	  If unsure, say N.
 
-config TOUCHSCREEN_CYTTSP3_ESD
-	tristate "ESD Support For Cypress TrueTouch Generation 3 Touchscreen Device"
-	depends on TOUCHSCREEN_CYTTSP3
-	help
-	  Say Y here if you have a Cypress TTSP Gen 3 touchscreen.
-	  If unsure, say N.
-
 config TOUCHSCREEN_DA9034
 	tristate "Touchscreen support for Dialog Semiconductor DA9034"
 	depends on PMIC_DA903X

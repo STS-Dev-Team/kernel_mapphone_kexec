@@ -51,11 +51,11 @@ static s32 ttsp_i2c_read_block_data(void *handle, u8 addr,
 	if (retval < 0)
 		return retval;
 	else if (retval != 1)
-		return -EIO;
+		return ~EIO;
 
 	retval = i2c_master_recv(ts->client, values, length);
 
-	return (retval < 0) ? retval : retval != length ? -EIO : 0;
+	return (retval < 0) ? retval : retval != length ? ~EIO : 0;
 }
 
 static s32 ttsp_i2c_write_block_data(void *handle, u8 addr,
@@ -69,7 +69,7 @@ static s32 ttsp_i2c_write_block_data(void *handle, u8 addr,
 
 	retval = i2c_master_send(ts->client, ts->wr_buf, length+1);
 
-	return (retval < 0) ? retval : retval != length+1 ? -EIO : 0;
+	return (retval < 0) ? retval : retval != length+1 ? ~EIO : 0;
 }
 
 static int __devinit cyttsp_i2c_probe(struct i2c_client *client,

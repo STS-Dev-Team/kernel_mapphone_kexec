@@ -192,7 +192,7 @@ struct fm_cmd_msg_hdr {
 	__u8 fm_opcode;		/* FM Opcode */
 	__u8 rd_wr;		/* Read/Write command */
 	__u8 dlen;		/* Length of payload */
-} __packed;
+} __attribute__ ((packed));
 
 #define FM_CMD_MSG_HDR_SIZE    5	/* sizeof(struct fm_cmd_msg_hdr) */
 
@@ -205,7 +205,7 @@ struct fm_event_msg_hdr {
 	__u8 fm_opcode;		/* FM Opcode */
 	__u8 rd_wr;		/* Read/Write command */
 	__u8 dlen;		/* Length of payload */
-} __packed;
+} __attribute__ ((packed));
 
 #define FM_EVT_MSG_HDR_SIZE     7	/* sizeof(struct fm_event_msg_hdr) */
 
@@ -218,19 +218,19 @@ struct bts_header {
 	uint32_t version;
 	uint8_t future[24];
 	uint8_t actions[0];
-} __packed;
+} __attribute__ ((packed));
 
 /* Firmware action */
 struct bts_action {
 	uint16_t type;
 	uint16_t size;
 	uint8_t data[0];
-} __packed;
+} __attribute__ ((packed));
 
 /* Firmware delay */
 struct bts_action_delay {
 	uint32_t msec;
-} __packed;
+} __attribute__ ((packed));
 
 #define ACTION_SEND_COMMAND	1
 #define ACTION_WAIT_EVENT	2
