@@ -57,6 +57,15 @@ void __init mapphone_omap44xx_padconf_init(void)
 				continue;
 			}
 
+			printk(KERN_INFO "CORE_PADCONF: offset=%lx, mode=%x, input_en=%x, pull_type=%x, offmode_en=%x, offout_type=%x, offpull_type=%x, offwkup_en=%x\n",
+					OMAP443X_CTRL_BASE + core->offset,
+					core->mode,
+					core->input_en,
+					core->pull_type,
+					core->offmode_en,
+					core->offout_type,
+					core->offpull_type,
+					core->offwkup_en);
 			omap_writew(OMAP44XX_CORE_PADCONF_SETTING(core->mode,
 						core->input_en,
 						core->pull_type,
@@ -82,6 +91,12 @@ void __init mapphone_omap44xx_padconf_init(void)
 				continue;
 			}
 
+			printk(KERN_INFO "WKUP_PADCONF: offset=%lx, mode=%x, input_en=%x, pull_type=%x, offwkup_en=%x\n",
+					OMAP443X_CTRL_BASE + wkup->offset,
+					wkup->mode,
+					wkup->input_en,
+					wkup->pull_type,
+					wkup->offwkup_en);
 			omap_writew(OMAP44XX_WKUP_PADCONF_SETTING(wkup->mode,
 						wkup->input_en,
 						wkup->pull_type,
