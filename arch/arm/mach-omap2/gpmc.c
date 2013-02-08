@@ -733,10 +733,6 @@ static int __init gpmc_init(void)
 
 	l = gpmc_read_reg(GPMC_REVISION);
 	printk(KERN_INFO "GPMC revision %d.%d\n", (l >> 4) & 0x0f, l & 0x0f);
-
-//TODO: some ongoing problem with gpmc
-	return 0;
-
 	/* Set smart idle mode and automatic L3 clock gating */
 	l = gpmc_read_reg(GPMC_SYSCONFIG);
 	l &= 0x03 << 3;
