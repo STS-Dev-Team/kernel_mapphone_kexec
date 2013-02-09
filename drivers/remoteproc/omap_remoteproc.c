@@ -426,9 +426,13 @@ static int omap_rproc_pm_init(struct rproc *rproc, u64 susp_addr)
 	phys_addr_t pa;
 	int ret;
 
+#ifdef CONFIG_RPMSG_USE_OLD_DUCATI
+	pdata->suspend_addr = susp_addr;
+#else
 	ret = rproc_da_to_pa(rproc, susp_addr, &pa);
 	if (!ret)
 		pdata->suspend_addr = (u32)pa;
+#endif
 
 	return ret;
 }

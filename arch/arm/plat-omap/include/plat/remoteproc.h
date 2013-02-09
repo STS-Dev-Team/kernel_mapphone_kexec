@@ -19,6 +19,8 @@
 #include <linux/remoteproc.h>
 #include <plat/omap_device.h>
 
+#define OLD_DUCATI_SUSPEND_ADDR 0xb6af02d8
+
 /*
  * struct omap_rproc_timers_info - optional timers for the omap rproc
  *

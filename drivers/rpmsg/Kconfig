@@ -61,3 +61,10 @@ config RPMSG_JANKY_CAM_GPIO_HACK
 	---help---
 	  Turn this on to intercept requests for GPIO 38 and turn them into GPIO 83
 
+config RPMSG_USE_OLD_DUCATI
+	boolean "Use old Ducati resource MHZ"
+	default n
+	depends on RPMSG
+	---help---
+	  Turn this on to request resources using clock_rate * MHZ
+
