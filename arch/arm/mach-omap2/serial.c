@@ -347,15 +347,13 @@ static int __init omap_serial_early_init(void)
 	struct omap_hwmod *oh;
 
 	for (i = 0; i < OMAP_MAX_HSUART_PORTS; i++) {
-//TODO: just to keep debug_ll alive
-		if(i==2)
-			continue;
 		snprintf(omap_tty_name, MAX_UART_HWMOD_NAME_LEN,
 			"%s%d", OMAP_SERIAL_NAME, i);
 		if (cmdline_find_option(omap_tty_name)) {
 			omap_uart_con_id = i;
 			oh = omap_uart_hwmod_lookup(i);
-			oh->flags |= HWMOD_INIT_NO_IDLE | HWMOD_INIT_NO_RESET;
+			if (oh != NULL)
+				oh->flags |= HWMOD_INIT_NO_IDLE | HWMOD_INIT_NO_RESET;
 			return 0;
 		}
 	}
