@@ -37,6 +37,9 @@ void __init mapphone_omap44xx_padconf_init(void)
 	const struct padconf_core_entry *core;
 	const struct padconf_wkup_entry *wkup;
 	int i, size;
+#if 1
+	char mux_string[512];
+#endif
 
 	node = of_find_node_by_path(DT_PATH_MUX);
 	if (node == NULL) {
@@ -57,15 +60,34 @@ void __init mapphone_omap44xx_padconf_init(void)
 				continue;
 			}
 
-			printk(KERN_INFO "CORE_PADCONF: offset=%lx, mode=%x, input_en=%x, pull_type=%x, offmode_en=%x, offout_type=%x, offpull_type=%x, offwkup_en=%x\n",
-					OMAP443X_CTRL_BASE + core->offset,
-					core->mode,
-					core->input_en,
-					core->pull_type,
-					core->offmode_en,
-					core->offout_type,
-					core->offpull_type,
-					core->offwkup_en);
+#if 1
+			sprintf(mux_string, "OMAP4_MUX(%lx, OMAP_MUX_MODE%u", OMAP443X_CTRL_BASE + core->offset, core->mode);
+			if (core->input_en)
+				strcat(mux_string, " | OMAP_PIN_INPUT");
+			if (core->pull_type == 1)
+				strcat(mux_string, " | OMAP_PULL_ENA");
+			if (core->pull_type == 2)
+				strcat(mux_string, " | OMAP_PULL_UP");
+			if (core->pull_type == 3)
+				strcat(mux_string, " | OMAP_PULL_ENA | OMAP_PULL_UP");
+			if (core->offmode_en == 1)
+				strcat(mux_string, " | OMAP_OFF_EN");
+			if (core->offout_type == 1)
+				strcat(mux_string, " | OMAP_OFFOUT_EN");
+			if (core->offout_type == 2)
+				strcat(mux_string, " | OMAP_OFFOUT_VAL");
+			if (core->offout_type == 3)
+				strcat(mux_string, " | OMAP_OFFOUT_EN | OMAP_OFFOUT_VAL");
+			if (core->offpull_type == 1)
+				strcat(mux_string, " | OMAP_OFF_PULL_EN");
+			if (core->offpull_type == 2)
+				strcat(mux_string, " | OMAP_OFF_PULL_UP");
+			if (core->offpull_type == 3)
+				strcat(mux_string, " | OMAP_OFF_PULL_EN | OMAP_OFF_PULL_UP");
+			if (core->offwkup_en == 1)
+				strcat(mux_string, " | OMAP_WAKEUP_EN");
+			printk(KERN_INFO "%s),\n", mux_string);
+#endif
 			omap_writew(OMAP44XX_CORE_PADCONF_SETTING(core->mode,
 						core->input_en,
 						core->pull_type,
