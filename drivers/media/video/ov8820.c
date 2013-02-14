@@ -309,7 +309,7 @@ static int ov8820_s_power(struct v4l2_subdev *sd, int on)
 	struct device *dev = &client->dev;
 
 	//jakedebug
-	if (1) {
+	if (on) {
 		int ret;
 
 		if (ov8820->pdata->pre_poweron) {
