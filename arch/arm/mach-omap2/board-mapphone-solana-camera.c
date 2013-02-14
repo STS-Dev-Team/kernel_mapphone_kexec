@@ -4,10 +4,13 @@
 
 #include <plat/i2c.h>
 #include <plat/omap-pm.h>
+#include <linux/pm_runtime.h>
 
 #include <asm/mach-types.h>
 
-// FIXME-HASH: need new sensor drivers
+#include <media/ov8820.h>
+
+//leave 5640 in here until we make correct 7720 driver
 #include <media/ov5640.h>
 // #include <media/ov772x.h>
 
@@ -17,36 +20,109 @@
 #include "control.h"
 #include "mux.h"
 
-#define MAPPHONE_GPIO_CAM1_PWRDN	37
-#define MAPPHONE_GPIO_CAM2_REVERSE	47
+//omapconf dumped registers on stock
+// only 2 values changed to output,
+// assuming cam1 pwrdn and cam2 pwrdn are correct
+// not sure on reset
+#define MAPPHONE_GPIO_CAM1_PWRDN	171
+//#define MAPPHONE_GPIO_CAM2_REVERSE	47
 #define MAPPHONE_GPIO_CAM2_PWRDN	171
 #define MAPPHONE_GPIO_CAM_RESET		83
 
-#define OV5640_I2C_ADDRESS   (0x3C)
+//This should be right
+#define OV8820_I2C_ADDRESS   (0x36)
 
-/* FIXME-HASH: Disable read cam for now */
-#if 0
-static struct ov5640_platform_data ov5640_cam1_platform_data = {
+/*
+ * Have to specifically enable i2c3 module or else it idles
+ * its wired directly to camera i think
+ * Also need auxclk0 and some gpios, copying what happens on stock
+ */
+
+static int mapphone_solana_ov_cam1_pre_poweron(struct v4l2_subdev *subdev) {
+	int ret;
+	// flip on some gpios
+	gpio_direction_output(48, 1); // 48 is selection for ov8820, 171 is for ov7739?
+	gpio_direction_output(83,1); //  cam_reset?, has to stay on for both cams 
+	
+	//enable auclk0...is on with both cams
+	struct clk *clk = NULL;
+	clk = clk_get(NULL, "auxclk0_ck");
+	clk_enable(clk);
+	if(ret) {
+		pr_err("%s: could not get auxclk0_ck\n", __func__);
+		return -1;
+	}
+				
+	// enable i2c3 bus
+	struct i2c_adapter *adapter;
+	struct device *i2c_dev;
+	adapter = i2c_get_adapter(3);
+	if (!adapter) {
+		pr_err("%s: could not get i2c3 adapter\n", __func__);
+		return -1;
+	} 
+
+	i2c_dev = adapter->dev.parent;
+	i2c_detect_ext_master(adapter);
+	i2c_put_adapter(adapter);
+	
+	ret = pm_runtime_get_sync(i2c_dev);
+
+	ret -= ret == 1;
+	if (ret)
+		dev_warn(i2c_dev, "%s: failed get sync %d\n", __func__, ret);
+
+	return ret;
+}
+
+static int mapphone_solana_ov_cam1_post_poweroff(struct v4l2_subdev *subdev) {
+	//flip off GPIOS
+	gpio_free(48, 0);
+	gpio_free(83,0);
+
+	//disable clk
+	struct clk *clk = NULL;
+	clk = clk_get(NULL, "auxclk0_ck");
+	clk_disable(clk);
+	clk_put(clk);
+
+	//enable i2c3 idle
+	struct i2c_adapter *adapter;
+	struct device *i2c_dev;
+	adapter = i2c_get_adapter(3);
+
+	i2c_dev = adapter->dev.parent;
+	i2c_detect_ext_master(adapter);
+	i2c_put_adapter(adapter);
+	
+	ret = pm_runtime_put_sync(i2c_dev);
+	return 0;
+	
+return ret;
+}
+
+static struct ov8820_platform_data ov8820_cam1_platform_data = {
 	.reg_avdd = "vcam",	/* changed from cam2pwr */
-	.reg_dovdd = NULL,	/* Hardwired on */
+	.reg_dovdd = "vwlan1",	// possibly hardwired, but vwlan1 turns on w/cam on stock
 
-	.clk_xvclk = "auxclk2_ck",
+	.clk_xvclk = "auxclk1_ck",
 
-	.gpio_pwdn = MAPPHONE_GPIO_CAM1_PWRDN,
+	.gpio_pwdn = -1, // take care of this in pre/postpower as it requires specific stuff
 	.is_gpio_pwdn_acthi = 1,
-	.gpio_resetb = -1, /* Not connected */
+	.gpio_resetb = -1,
 
-	.pre_poweron = NULL,
-	.post_poweroff = NULL,
+	//need more clocks and i2c3 bus enabled
+	.pre_poweron = mapphone_solana_ov_cam1_pre_poweron,
+	.post_poweroff = mapphone_solana_ov_cam1_post_poweroff,
 };
 
-static struct i2c_board_info ov5640_cam1_i2c_device = {
-	I2C_BOARD_INFO("ov5640", OV5640_I2C_ADDRESS),
-	.platform_data = &ov5640_cam1_platform_data,
+static struct i2c_board_info ov8820_cam1_i2c_device = {
+	I2C_BOARD_INFO("ov8820", OV8820_I2C_ADDRESS),
+	.platform_data = &ov8820_cam1_platform_data,
 };
-#endif
 
-#define OV772X_I2C_ADDRESS   (0x36)
+//This should be right
+#define OV772X_I2C_ADDRESS   (0x3c)
 
 static struct ov5640_platform_data ov772x_cam2_platform_data = {
 	.reg_avdd = "vcam",	/* changed from cam2pwr */
@@ -56,7 +132,7 @@ static struct ov5640_platform_data ov772x_cam2_platform_data = {
 
 	.gpio_pwdn = MAPPHONE_GPIO_CAM2_PWRDN,
 	.is_gpio_pwdn_acthi = 1,
-	.gpio_resetb = -1, /* Not connected */
+	.gpio_resetb = MAPPHONE_GPIO_CAM_RESET,
 
 	.pre_poweron = NULL,
 	.post_poweroff = NULL,
@@ -67,16 +143,14 @@ static struct i2c_board_info ov772x_cam2_i2c_device = {
 	.platform_data = &ov772x_cam2_platform_data,
 };
 
-
-#if 0
-static struct iss_subdev_i2c_board_info ov5640_cam1_subdevs[] = {
+//These should stay 3
+static struct iss_subdev_i2c_board_info ov8820_cam1_subdevs[] = {
 	{
-		.board_info = &ov5640_cam1_i2c_device,
-		.i2c_adapter_id = 2,
+		.board_info = &ov8820_cam1_i2c_device,
+		.i2c_adapter_id = 3,
 	},
 	{ NULL, 0, },
 };
-#endif
 
 static struct iss_subdev_i2c_board_info ov772x_cam2_subdevs[] = {
 	{
@@ -87,10 +161,9 @@ static struct iss_subdev_i2c_board_info ov772x_cam2_subdevs[] = {
 };
 
 static struct iss_v4l2_subdevs_group mapphone_camera_subdevs[] = {
-#if 0
 	{
-		.subdevs = ov5640_cam1_subdevs,
-		.interface = ISS_INTERFACE_CSI2B_PHY2,
+		.subdevs = ov8820_cam1_subdevs,
+		.interface = ISS_INTERFACE_CSI2A_PHY1,
 		.bus = { .csi2 = {
 			.lanecfg	= {
 				.clk = {
@@ -104,10 +177,10 @@ static struct iss_v4l2_subdevs_group mapphone_camera_subdevs[] = {
 			},
 		} },
 	},
-#endif
+
 	{
 		.subdevs = ov772x_cam2_subdevs,
-		.interface = ISS_INTERFACE_CSI2A_PHY1,
+		.interface = ISS_INTERFACE_CSI2B_PHY2,
 		.bus = { .csi2 = {
 			.lanecfg	= {
 				.clk = {
@@ -139,6 +212,7 @@ static struct iss_platform_data mapphone_iss_platform_data = {
 	.set_constraints = mapphone_omap4iss_set_constraints,
 };
 
+//pads should be good..worthless if we cant get it to turn on though
 static struct omap_device_pad omap4iss_pads[] = {
 	/* CSI2-A */
 	{
@@ -195,6 +269,9 @@ static int __init mapphone_camera_init(void)
 	omap_mux_init_gpio(MAPPHONE_GPIO_CAM1_PWRDN, OMAP_PIN_OUTPUT);
 	omap_mux_init_gpio(MAPPHONE_GPIO_CAM2_PWRDN, OMAP_PIN_OUTPUT);
 	omap_mux_init_gpio(MAPPHONE_GPIO_CAM_RESET, OMAP_PIN_OUTPUT);
+
+	// fref_clk0_out -- turns on for both cams, might be necessary
+	omap_mux_init_signal("fref_clk0_out", OMAP_PIN_OUTPUT);
 
 	/* Init FREF_CLK1_OUT */
 	omap_mux_init_signal("fref_clk1_out", OMAP_PIN_OUTPUT);

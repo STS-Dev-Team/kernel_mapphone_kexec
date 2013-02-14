@@ -478,7 +478,12 @@ config VIDEO_OV5650
 	depends on I2C && VIDEO_V4L2
 	help
 	  This is a ov5650 camera driver
-
+	  
+config VIDEO_OV8820
+	tristate "OmniVision OV8820 sensro support"
+	depends on I2C && VIDEO_V4L2
+	help
+	  This is a oc8820 camera driver
 config VIDEO_MT9V011
 	tristate "Micron mt9v011 sensor support"
 	depends on I2C && VIDEO_V4L2
