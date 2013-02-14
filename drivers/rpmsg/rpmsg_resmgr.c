@@ -43,6 +43,9 @@
 #define AUX_CLK_MIN	0
 #define AUX_CLK_MAX	5
 #define GPTIMERS_MAX	11
+#ifdef CONFIG_RPMSG_USE_OLD_DUCATI
+#define MHZ		1000000
+#endif
 #define MAX_MSG		(sizeof(struct rprm_ack) + sizeof(struct rprm_sdma))
 
 static struct dentry *rprm_dbg;
@@ -208,7 +211,11 @@ static int rprm_auxclk_request(struct rprm_elem *e, struct rprm_auxclk *obj)
 		goto error_aux_src;
 	}
 
+#ifdef CONFIG_RPMSG_USE_OLD_DUCATI
+	ret = clk_set_rate(src_parent, (obj->parent_src_clk_rate * MHZ));
+#else
 	ret = clk_set_rate(src_parent, obj->parent_src_clk_rate);
+#endif
 	if (ret) {
 		pr_err("%s: rate not supported by %s\n", __func__,
 					clk_src_name[obj->parent_src_clk]);
@@ -230,7 +237,11 @@ static int rprm_auxclk_request(struct rprm_elem *e, struct rprm_auxclk *obj)
 		goto error_aux_src_parent;
 	}
 
+#ifdef CONFIG_RPMSG_USE_OLD_DUCATI
+	ret = clk_set_rate(acd->aux_clk, (obj->clk_rate * MHZ));
+#else
 	ret = clk_set_rate(acd->aux_clk, obj->clk_rate);
+#endif
 	if (ret) {
 		pr_err("%s: rate not supported by %s\n", __func__, clk_name);
 		goto error_aux_enable;
@@ -276,7 +287,7 @@ int rprm_regulator_request(struct rprm_elem *e, struct rprm_regulator *obj)
 	int ret;
 	struct rprm_regulator_depot *rd;
 	char *reg_name;
-
+		
 	if (obj->id > REGULATOR_MAX) {
 		pr_err("Invalid regulator %d\n", obj->id);
 		return -EINVAL;
@@ -288,6 +299,7 @@ int rprm_regulator_request(struct rprm_elem *e, struct rprm_regulator *obj)
 		return -ENOMEM;
 
 	reg_name = regulator_name[obj->id - 1];
+	printk("RPMSG Requesting regulator %s\n",reg_name);
 	rd->reg_p = regulator_get_exclusive(NULL, reg_name);
 	if (IS_ERR_OR_NULL(rd->reg_p)) {
 		pr_err("%s: error providing regulator %s\n", __func__, reg_name);

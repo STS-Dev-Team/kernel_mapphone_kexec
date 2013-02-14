@@ -118,9 +118,9 @@ void __init omap_ion_init(void)
 		omap4_ion_heap_nonsec_tiler_mem_size = 0;
 		omap4_ion_heap_tiler_mem_size = 0;
 	} else {
-		omap4_ion_heap_secure_input_size = (SZ_1M * 90);
-		omap4_ion_heap_secure_output_wfdhdcp_size = (SZ_1M * 16);
-		omap4_ducati_heap_size = (SZ_1M * 109);
+		omap4_ion_heap_secure_input_size = (SZ_1M * 20);
+		omap4_ion_heap_secure_output_wfdhdcp_size = (SZ_1M * 0);
+		omap4_ducati_heap_size = (SZ_1M * 128);
 		omap4_ion_heap_nonsec_tiler_mem_size = nonsecure;
 		omap4_ion_heap_tiler_mem_size =
 					 (ALIGN(omap4_ion_pdata.tiler2d_size +

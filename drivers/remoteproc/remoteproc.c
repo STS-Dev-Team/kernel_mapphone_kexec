@@ -825,6 +825,10 @@ static int rproc_handle_resources(struct rproc *rproc, struct fw_resource *rsc,
 	u64 susp_addr = 0;
 	int ret = 0;
 
+#ifdef CONFIG_RPMSG_USE_OLD_DUCATI
+	// set susp_addr here (from arch/arm/mach-omap2/remoteproc.c in 3.0.8 kernel)
+	susp_addr = OLD_DUCATI_SUSPEND_ADDR;
+#endif
 	while (len >= sizeof(*rsc) && !ret) {
 		da = rsc->da;
 		pa = rsc->pa;
