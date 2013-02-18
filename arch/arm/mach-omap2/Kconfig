@@ -404,8 +404,8 @@ config MACH_MAPPHONE_SOLANA_CAMERA_SUPPORT
 	select VIDEO_V4L2_SUBDEV_API
 	select V4L_PLATFORM_DRIVERS
 	select VIDEO_OMAP4
-	select VIDEO_OV5640
-#	select VIDEO_OV8820
+#	select VIDEO_OV5640
+	select VIDEO_OV8820
 #	select VIDEO_OV7741
 	help
 	  Enable Camera HW support for MAPPHONE SOLANA board

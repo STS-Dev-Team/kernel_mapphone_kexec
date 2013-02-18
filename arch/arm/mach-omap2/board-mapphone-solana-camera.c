@@ -77,8 +77,8 @@ static int mapphone_solana_ov_cam1_pre_poweron(struct v4l2_subdev *subdev) {
 
 static int mapphone_solana_ov_cam1_post_poweroff(struct v4l2_subdev *subdev) {
 	//flip off GPIOS
-	gpio_free(48, 0);
-	gpio_free(83,0);
+	gpio_free(48);
+	gpio_free(83);
 
 	//disable clk
 	struct clk *clk = NULL;
@@ -95,10 +95,8 @@ static int mapphone_solana_ov_cam1_post_poweroff(struct v4l2_subdev *subdev) {
 	i2c_detect_ext_master(adapter);
 	i2c_put_adapter(adapter);
 	
-	ret = pm_runtime_put_sync(i2c_dev);
+	pm_runtime_put_sync(i2c_dev);
 	return 0;
-	
-return ret;
 }
 
 static struct ov8820_platform_data ov8820_cam1_platform_data = {
