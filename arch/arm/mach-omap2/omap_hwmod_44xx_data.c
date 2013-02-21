@@ -2545,7 +2545,7 @@ static struct omap_hwmod_addr_space omap44xx_gpio2_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l4_per__gpio2 = {
 	.master		= &omap44xx_l4_per_hwmod,
 	.slave		= &omap44xx_gpio2_hwmod,
-	.clk		= "gpio2_ick",
+	.clk		= "l4_div_ck",
 	.addr		= omap44xx_gpio2_addrs,
 	.addr_cnt	= ARRAY_SIZE(omap44xx_gpio2_addrs),
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
@@ -2563,11 +2563,11 @@ static struct omap_hwmod_opt_clk gpio2_opt_clks[] = {
 static struct omap_hwmod omap44xx_gpio2_hwmod = {
 	.name		= "gpio2",
 	.class		= &omap44xx_gpio_hwmod_class,
-//#ifdef CONFIG_FB_OMAP_BOOTLOADER_INIT
-//	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET | HWMOD_INIT_NO_RESET,
-//#else
+#ifdef CONFIG_FB_OMAP_BOOTLOADER_INIT
+	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET | HWMOD_INIT_NO_RESET,
+#else
 	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET,
-//#endif
+#endif
 	.mpu_irqs	= omap44xx_gpio2_irqs,
 	.mpu_irqs_cnt	= ARRAY_SIZE(omap44xx_gpio2_irqs),
 	.main_clk	= "gpio2_ick",
@@ -2682,6 +2682,7 @@ static struct omap_hwmod omap44xx_gpio4_hwmod = {
 #ifdef CONFIG_FB_OMAP_BOOTLOADER_INIT
 	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET | HWMOD_INIT_NO_RESET,
 #else
+	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET,
 #endif
 	.mpu_irqs	= omap44xx_gpio4_irqs,
 	.mpu_irqs_cnt	= ARRAY_SIZE(omap44xx_gpio4_irqs),
@@ -2739,6 +2740,7 @@ static struct omap_hwmod omap44xx_gpio5_hwmod = {
 #ifdef CONFIG_FB_OMAP_BOOTLOADER_INIT
 	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET | HWMOD_INIT_NO_RESET,
 #else
+	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET,
 #endif
 	.mpu_irqs	= omap44xx_gpio5_irqs,
 	.mpu_irqs_cnt	= ARRAY_SIZE(omap44xx_gpio5_irqs),
@@ -2775,7 +2777,7 @@ static struct omap_hwmod_addr_space omap44xx_gpio6_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l4_per__gpio6 = {
 	.master		= &omap44xx_l4_per_hwmod,
 	.slave		= &omap44xx_gpio6_hwmod,
-	.clk		= "gpio6_ick",
+	.clk		= "l4_div_ck",
 	.addr		= omap44xx_gpio6_addrs,
 	.addr_cnt	= ARRAY_SIZE(omap44xx_gpio6_addrs),
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
@@ -2794,8 +2796,9 @@ static struct omap_hwmod omap44xx_gpio6_hwmod = {
 	.name		= "gpio6",
 	.class		= &omap44xx_gpio_hwmod_class,
 #ifdef CONFIG_FB_OMAP_BOOTLOADER_INIT
-	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET,// | HWMOD_INIT_NO_RESET,
+	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET | HWMOD_INIT_NO_RESET,
 #else
+	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET,
 #endif
 	.mpu_irqs	= omap44xx_gpio6_irqs,
 	.mpu_irqs_cnt	= ARRAY_SIZE(omap44xx_gpio6_irqs),
