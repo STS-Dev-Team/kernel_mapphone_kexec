@@ -190,12 +190,17 @@ static int ts27010_uart_driver_send(
 #ifdef TS27010_UART_RETRAN
 static void transfer_timeout(unsigned long para)
 {
+	u8 sn_para = ts27010_get_retran_sn(
+		ts27010_slidewindow_peek(
+		s_slide_window, para));
+
 	FUNC_ENTER();
 	mux_print(MSG_INFO,
 		"transfer_timeout, para= %ld, slide_window.head=%d, "
-		"tail=%d, jiffies: %lu\n",
+		"tail=%d, sn: 0x%x, jiffies: %lu\n",
 		para, ts27010_slidewindow_head(s_slide_window),
-		ts27010_slidewindow_tail(s_slide_window), jiffies);
+		ts27010_slidewindow_tail(s_slide_window),
+		sn_para, jiffies);
 
 	if (para >= SLIDE_WINDOWS_SIZE_AP) {
 		mux_print(MSG_ERROR, "illegal para: %ld", para);
@@ -238,7 +243,7 @@ static void ts27010_uart_retran_worker(struct work_struct *work)
 				&s_mux_resend_lock);
 			ts27010_mod_retran_timer(retran_info);
 
-			if (!ret) {
+			if (ret == ts27010_get_retran_len(retran_info)) {
 				/* this frame retransfered */
 				mux_print(MSG_INFO,
 					"frame %x retransfered successful, "
@@ -398,6 +403,12 @@ int ts27010_uart_process_ack(struct ts0710_con *ts0710, u8 sn)
 	u8 index = 0xFF; /* index of the slide window */
 	FUNC_ENTER();
 
+#ifdef DUMP_FRAME
+	if (g_mux_uart_dump_seq)
+		mux_print(MSG_INFO, "ACK for SN 0x%x\n", sn);
+	else
+		mux_print(MSG_DEBUG, "ACK for SN 0x%x\n", sn);
+#endif
 	if (number == INDIFFERENT_SN) {
 		/*
 		 * the ACK has nothing to do with slide window,
@@ -555,16 +566,6 @@ int ts27010_check_sequence_number(struct ts0710_con *ts0710, u8 sn)
 int ts27010_uart_td_open(void)
 {
 	FUNC_ENTER();
-#ifdef PROC_DEBUG_MUX
-	s_proc_mux = ts27010_uart_proc_alloc();
-	if (!s_proc_mux)
-		goto err;
-#ifdef PROC_DEBUG_MUX_STAT
-	s_proc_stat_mux = ts27010_uart_proc_stat_alloc();
-	if (!s_proc_stat_mux)
-		goto err;
-#endif
-#endif
 #ifdef TS27010_UART_RETRAN
 	s_timer_para = ts27010_alloc_timer_para(ts27010_uart_retran_worker);
 	if (!s_timer_para)
@@ -581,22 +582,14 @@ int ts27010_uart_td_open(void)
 #endif
 	return 0;
 
-err:
 #ifdef TS27010_UART_RETRAN
+err:
 	if (s_ap_received_sn)
 		ts27010_sequence_number_free(s_ap_received_sn);
 	if (s_slide_window)
 		ts27010_slidewindow_free(s_slide_window);
 	if (s_timer_para)
 		ts27010_timer_para_free(s_timer_para);
-#endif
-#ifdef PROC_DEBUG_MUX
-#ifdef PROC_DEBUG_MUX_STAT
-	if (s_proc_stat_mux)
-		ts27010_uart_proc_free(s_proc_stat_mux, "muxuart_stat");
-#endif
-	if (s_proc_mux)
-		ts27010_uart_proc_free(s_proc_mux, "muxuart");
 #endif
 	return -ENOMEM;
 }
@@ -619,6 +612,16 @@ int ts27010_uart_td_init(void)
 		return -ENOMEM;
 #endif
 
+#ifdef PROC_DEBUG_MUX
+	s_proc_mux = ts27010_uart_proc_alloc();
+	if (!s_proc_mux)
+		mux_print(MSG_ERROR, "create muxuart proc error\n");
+#ifdef PROC_DEBUG_MUX_STAT
+	s_proc_stat_mux = ts27010_uart_proc_stat_alloc();
+	if (!s_proc_stat_mux)
+		mux_print(MSG_ERROR, "create muxuart_stat proc error\n");
+#endif
+#endif
 	FUNC_EXIT();
 	return 0;
 }
@@ -645,6 +648,12 @@ void ts27010_uart_td_close(void)
 	s_ap_received_sn = NULL;
 	g_ap_send_sn = NULL;
 #endif
+	FUNC_EXIT();
+}
+
+void ts27010_uart_td_remove(void)
+{
+	FUNC_ENTER();
 #ifdef PROC_DEBUG_MUX
 #ifdef PROC_DEBUG_MUX_STAT
 	if (s_proc_stat_mux)
@@ -653,12 +662,6 @@ void ts27010_uart_td_close(void)
 	if (s_proc_mux)
 		ts27010_uart_proc_free(s_proc_mux, "muxuart");
 #endif
-	FUNC_EXIT();
-}
-
-void ts27010_uart_td_remove(void)
-{
-	FUNC_ENTER();
 #ifdef CONFIG_WAKELOCK
 	/* remove android sleep lock. */
 #ifdef TS27010_UART_RETRAN

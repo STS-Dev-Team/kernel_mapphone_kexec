@@ -51,6 +51,7 @@
 
 #ifdef CONFIG_WAKELOCK
 /*  Add android power sleep lock */
+static struct wake_lock s_muxusb_tx_wakelock;
 #ifdef TS27010_UART_RETRAN
 static struct wake_lock s_mux_resend_lock;
 #endif
@@ -127,7 +128,11 @@ static int ts27010_usb_uih_send_loop(struct ts0710_con *ts0710,
 #endif
 
 #ifndef QUEUE_SEND
-/* #define QUEUE_SEND */
+#define QUEUE_SEND
+#ifdef DUMP_FRAME
+#define DUMP_SEQ
+static unsigned int s_mux_usb_seq;
+#endif
 #endif
 
 #ifdef QUEUE_SEND
@@ -135,6 +140,9 @@ struct mux_data_list_t {
 	struct list_head list;
 	int size;
 	u8 *body;
+#ifdef DUMP_SEQ
+	unsigned int seq;
+#endif
 };
 
 struct mux_sender_t {
@@ -154,6 +162,10 @@ struct mux_sender_t {
 #endif
 };
 
+/* the max size of mux catched data from apps writing */
+static int s_nCatched;
+#define MUX_USB_MAX_CATCHED_SIZE (128 * 1024)
+
 #ifdef USE_THREAD
 typedef int (*THREAD_T)(void *data);
 #else
@@ -172,27 +184,59 @@ static int mux_usb_send_frame(struct mux_sender_t *sender)
 	struct list_head *ptr;
 	unsigned long flags = 0;
 
+	if (ts27010_ldisc_usb_is_hold()) {
+		/* ttyUSB0 is unavailable */
+		mux_print(MSG_INFO, "Can't send since USB held!\n");
+		return 0;
+	}
+	if (!s_mux_uih_sender)
+		return 0;
+
+	wake_lock(&s_muxusb_tx_wakelock);
 	spin_lock_irqsave(&sender->m_locker, flags);
 	while (!(list_empty(&sender->m_datalist))) {
 		ptr = sender->m_datalist.next;
 		entry = list_entry(ptr, struct mux_data_list_t, list);
 		spin_unlock_irqrestore(&sender->m_locker, flags);
+
 		sent = ts27010_ldisc_usb_send(
 			ts27010mux_usb_tty, entry->body, entry->size);
-		if (sent != entry->size) {
+		if (ts27010mux_usb_tty == NULL || sent != entry->size) {
+			/* don't discard unsent data */
 			mux_print(MSG_WARNING, "%d of %d data sent to usb\n",
 				sent, entry->size);
+			wake_unlock(&s_muxusb_tx_wakelock);
+			return 0;
 		}
+		if (s_mux_uih_sender) {
+			mux_print(MSG_DEBUG, "%d data sent to usb by %s\n",
+				sent, sender->m_name);
 
-		mux_print(MSG_DEBUG, "%d data sent to usb by %s\n",
-			sent, sender->m_name);
-
-		spin_lock_irqsave(&sender->m_locker, flags);
-		list_del(ptr);
-		kfree(entry->body);
-		kfree(entry);
+			spin_lock_irqsave(&sender->m_locker, flags);
+#ifdef DUMP_SEQ
+			if (g_mux_usb_dump_seq)
+				mux_print(MSG_INFO, "send usb successfully: "
+					"%d-%d on dlci %d\n",
+					sent, entry->seq, entry->body[1] >> 2);
+			else
+				mux_print(MSG_DEBUG, "send usb successfully: "
+					"%d-%d on dlci %d\n",
+					sent, entry->seq, entry->body[1] >> 2);
+#endif
+			s_nCatched -= entry->size;
+			if (ptr->next != LIST_POISON1
+				&& ptr->prev != LIST_POISON2) {
+				list_del(ptr);
+				kfree(entry->body);
+				kfree(entry);
+			}
+		} else {
+			wake_unlock(&s_muxusb_tx_wakelock);
+			return 0;
+		}
 	}
 	spin_unlock_irqrestore(&sender->m_locker, flags);
+	wake_unlock(&s_muxusb_tx_wakelock);
 
 	return 0;
 }
@@ -222,13 +266,14 @@ static void mux_usb_send_worker(struct work_struct *work)
 		container_of(work, struct mux_sender_t, m_send_work.work);
 
 	if (test_and_set_bit(SEND_RUNNING, &s_mux_send_flags)) {
-		mux_print(MSG_WARNING, "a send_work is running\n");
+		mux_print(MSG_INFO, "a send_work is running\n");
+		if (s_mux_uih_sender)
 #ifdef QUEUE_SELF
-		queue_delayed_work(g_mux_usb_queue, &sender->m_send_work,
-			msecs_to_jiffies(20));
+			queue_delayed_work(g_mux_usb_queue,
+				&sender->m_send_work, msecs_to_jiffies(20));
 #else
-		schedule_delayed_work(&sender->m_send_work,
-			msecs_to_jiffies(20));
+			schedule_delayed_work(&sender->m_send_work,
+				msecs_to_jiffies(20));
 #endif
 		return;
 	}
@@ -301,9 +346,6 @@ static void mux_sender_free(struct mux_sender_t *sender)
 		kfree(entry);
 	}
 	spin_unlock_irqrestore(&sender->m_locker, flags);
-
-	kfree(sender);
-	sender = NULL;
 }
 
 static int mux_usb_queue_data(struct mux_sender_t *sender,
@@ -335,22 +377,52 @@ static int mux_usb_queue_data(struct mux_sender_t *sender,
 	mux_list->size = len;
 	memcpy(mux_list->body, buf, len);
 
+	ret = 0;
+	if (s_mux_uih_sender) {
+		spin_lock_irqsave(&sender->m_locker, flags);
+		if (s_nCatched <= MUX_USB_MAX_CATCHED_SIZE) {
+			list_add_tail(&mux_list->list, &sender->m_datalist);
+			s_nCatched += mux_list->size;
+#ifdef DUMP_SEQ
+			mux_list->seq = s_mux_usb_seq++;
+			if (g_mux_usb_dump_seq)
+				mux_print(MSG_INFO, "cache usb successfully: "
+					"%d-%d on dlci %d\n", mux_list->size,
+					mux_list->seq, buf[1] >> 2);
+			else
+				mux_print(MSG_DEBUG, "cache usb successfully: "
+					"%d-%d on dlci %d\n", mux_list->size,
+					mux_list->seq, buf[1] >> 2);
+#endif
+		} else {
+			ret = -ENOSPC;
+		}
+		spin_unlock_irqrestore(&sender->m_locker, flags);
+	} else {
+		ret = -EINVAL;
+	}
+	if (ret < 0) {
+		mux_print(MSG_ERROR, "catche buffer size arrives max: "
+			"%d, discard this writing %d, ret = %d\n",
+			s_nCatched, len, ret);
+		kfree(mux_list->body);
+		kfree(mux_list);
+		return ret;
+	}
 
-	spin_lock_irqsave(&sender->m_locker, flags);
-	list_add_tail(&mux_list->list, &sender->m_datalist);
-	spin_unlock_irqrestore(&sender->m_locker, flags);
-	mux_print(MSG_DEBUG, "%d into queue buffer by %s\n",
-		len, sender->m_name);
-
+	if (s_mux_uih_sender) {
+		mux_print(MSG_DEBUG, "%d into queue buffer by %s\n",
+			len, sender->m_name);
 #ifdef USE_THREAD
-	up(&sender->m_sem);
+		up(&sender->m_sem);
 #else
 #ifdef QUEUE_SELF
-	queue_delayed_work(g_mux_usb_queue, &sender->m_send_work, 0);
+		queue_delayed_work(g_mux_usb_queue, &sender->m_send_work, 0);
 #else
-	schedule_delayed_work(&sender->m_send_work, 0);
+		schedule_delayed_work(&sender->m_send_work, 0);
 #endif
 #endif
+	}
 
 	return len;
 }
@@ -774,24 +846,29 @@ int ts27010_usb_td_open(void)
 
 #ifdef PROT_THREAD_SEND
 #ifdef USE_THREAD
-	s_mux_protocol_sender = mux_alloc_sender(
-		mux_usb_send_thread, "mux_prot_sender");
+	if (!s_mux_protocol_sender)
+		s_mux_protocol_sender = mux_alloc_sender(
+			mux_usb_send_thread, "mux_prot_sender");
 #else
-	s_mux_protocol_sender = mux_alloc_sender(
-		mux_usb_send_worker, "mux_prot_sender");
+	if (!s_mux_protocol_sender)
+		s_mux_protocol_sender = mux_alloc_sender(
+			mux_usb_send_worker, "mux_prot_sender");
 #endif
 	if (!s_mux_protocol_sender)
 		goto err;
 #endif
 
 #ifdef QUEUE_SEND
+	s_nCatched = 0;
 #ifdef USE_THREAD
-	s_mux_uih_sender = mux_alloc_sender(
-		mux_usb_send_thread, "mux_uih_sender");
+	if (!s_mux_uih_sender)
+		s_mux_uih_sender = mux_alloc_sender(
+			mux_usb_send_thread, "mux_uih_sender");
 #else
 	s_mux_send_flags = 0;
-	s_mux_uih_sender = mux_alloc_sender(
-		mux_usb_send_worker, "mux_uih_sender");
+	if (!s_mux_uih_sender)
+		s_mux_uih_sender = mux_alloc_sender(
+			mux_usb_send_worker, "mux_uih_sender");
 #endif
 	if (!s_mux_uih_sender)
 		goto err;
@@ -832,6 +909,7 @@ int ts27010_usb_td_init(void)
 
 #ifdef CONFIG_WAKELOCK
 	/* Init android sleep lock. */
+	wake_lock_init(&s_muxusb_tx_wakelock, WAKE_LOCK_SUSPEND, "muxusb_tx");
 #ifdef TS27010_UART_RETRAN
 	wake_lock_init(&s_mux_resend_lock, WAKE_LOCK_SUSPEND, "mux_resend");
 #endif
@@ -841,6 +919,12 @@ int ts27010_usb_td_init(void)
 	g_mux_usb_logger = ts27010_alloc_mux_usb_logger();
 	if (!g_mux_usb_logger)
 		return -ENOMEM;
+#endif
+#ifdef PROT_THREAD_SEND
+	s_mux_protocol_sender = NULL;
+#endif
+#ifdef QUEUE_SEND
+	s_mux_uih_sender = NULL;
 #endif
 
 	FUNC_EXIT();
@@ -874,12 +958,10 @@ void ts27010_usb_td_close(void)
 #ifdef PROT_THREAD_SEND
 	if (s_mux_protocol_sender) {
 		mux_sender_free(s_mux_protocol_sender);
-		s_mux_protocol_sender = NULL;
 	}
 #endif
 	if (s_mux_uih_sender) {
 		mux_sender_free(s_mux_uih_sender);
-		s_mux_uih_sender = NULL;
 	}
 #endif
 
@@ -891,6 +973,11 @@ void ts27010_usb_td_close(void)
 	if (s_proc_mux)
 		ts27010_usb_proc_free(s_proc_mux, "muxusb");
 #endif
+
+#ifdef DUMP_SEQ
+	s_mux_usb_seq = 0;
+#endif
+
 	FUNC_EXIT();
 }
 
@@ -899,6 +986,7 @@ void ts27010_usb_td_remove(void)
 	FUNC_ENTER();
 #ifdef CONFIG_WAKELOCK
 	/* remove android sleep lock. */
+	wake_lock_destroy(&s_muxusb_tx_wakelock);
 #ifdef TS27010_UART_RETRAN
 	wake_lock_destroy(&s_mux_resend_lock);
 #endif

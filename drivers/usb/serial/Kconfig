@@ -467,6 +467,13 @@ config USB_SERIAL_MDM6600
 	  To compile this driver as a module, choose M here: the
 	  module will be called mdm6600.  If unsure, choose N.
 
+config USB_SERIAL_PNX6718
+	bool "USB Motorola TD Phone modem driver"
+	default n
+	---help---
+	  Say Y here if you want to enable the AP/BP USB IPC link
+	  driver for TD Phone with PNX6718 modem.
+
 config USB_QSC6085_CDMA_MODEM
       tristate "USB Motorola Phone modem driver"
       ---help---

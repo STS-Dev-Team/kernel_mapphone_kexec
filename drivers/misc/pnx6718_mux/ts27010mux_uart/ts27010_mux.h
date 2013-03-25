@@ -45,8 +45,11 @@
 extern struct tty_struct *ts27010mux_uart_tty;
 
 extern struct workqueue_struct *g_mux_uart_queue;
+#ifdef DUMP_FRAME
 extern int g_mux_uart_dump_frame;
+extern int g_mux_uart_dump_seq;
 extern int g_mux_uart_dump_user_data;
+#endif
 
 #ifdef MUX_UART_LOGGER
 extern struct ts27010_mux_logger *g_mux_uart_logger;
@@ -108,6 +111,7 @@ int ts27010_tty_uart_init(void);
 int ts27010_tty_uart_send(int line, u8 *data, int len);
 int ts27010_tty_uart_send_rbuf(int line, struct ts27010_ringbuf *rbuf,
 			  int data_idx, int len);
+void ts27010_tty_uart_reset_tty(int line);
 void ts27010_tty_uart_remove(void);
 int ts27010_tty_uart_open(void);
 void ts27010_tty_uart_close(void);
