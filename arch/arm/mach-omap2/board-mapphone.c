@@ -1460,6 +1460,9 @@ static void __init mapphone_init(void)
 			pr_err("TPS62361 initialization failed: %d\n", status);
 	}
 
+#if defined(CONFIG_MOTSOC1)
+	mapphone_motsoc1_init();
+#endif
 	omap_enable_smartreflex_on_init();
 	if (enable_suspend_off)
 		omap_pm_enable_off_mode();
