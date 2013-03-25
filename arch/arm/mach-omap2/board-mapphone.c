@@ -93,6 +93,7 @@
 #include <plat/board-mapphone-emu_uart.h>
 
 #define WILINK_UART_DEV_NAME "/dev/ttyO3"
+#include <linux/motsoc1.h>
 
 #define MAPPHONE_POWER_OFF_GPIO         176
 
@@ -279,6 +280,120 @@ static void __init mapphone_bp_model_init(void)
 	}
 }
 
+/* MOTSOC1 */
+#ifdef CONFIG_MOTSOC1
+
+static int mapphone_motsoc1_initialization(void)
+{
+	pr_debug("mapphone_motsoc1_initialization\n");
+	return 0;
+}
+
+static void mapphone_motsoc1_exit(void)
+{
+	pr_debug("mapphone_motsoc1_exit\n");
+	return;
+}
+
+static int mapphone_motsoc1_power_on(void)
+{
+	pr_debug("mapphone_motsoc1_power_on\n");
+	return 0;
+}
+
+static int mapphone_motsoc1_power_off(void)
+{
+	pr_debug("mapphone_motsoc1_power_off\n");
+	return 0;
+}
+
+static struct clk *mp_motsoc1_aux_clk;
+static int mp_motsoc1_mclk_in_use;
+static struct mutex mp_motsoc1_mclk_lock;
+
+static void set_motsoc1_fref_clk1_out_mode(int mode)
+{
+	u32 tmp_val;
+	u32 reg = OMAP443X_CTRL_BASE + 0x198;
+
+	tmp_val = omap_readl(reg);
+	tmp_val = tmp_val & (~(0x7 << 16));
+	tmp_val = tmp_val | (mode << 16);
+	omap_writel(tmp_val, reg);
+}
+
+static void mapphone_motsoc1_mclk_on(void)
+{
+	struct clk *aux_clk;
+	pr_debug("mapphone_motsoc1_mclk_on\n");
+	mutex_lock(&mp_motsoc1_mclk_lock);
+	aux_clk = clk_get(NULL, "auxclk1_ck");
+	if (!aux_clk) {
+		pr_err("%s %d Unable to get auxclk1_ck\n", __func__, __LINE__);
+		goto out;
+	}
+	mp_motsoc1_aux_clk = aux_clk;
+	if (!mp_motsoc1_mclk_in_use) {
+		/* set to clk mode */
+		set_motsoc1_fref_clk1_out_mode(0x0);
+		clk_enable(aux_clk);
+		pr_debug("motsoc1: clk_enable done!\n");
+		mp_motsoc1_mclk_in_use = 1;
+	}
+out:
+	mutex_unlock(&mp_motsoc1_mclk_lock);
+	return;
+}
+
+static void mapphone_motsoc1_mclk_off(void)
+{
+	pr_debug("mapphone_motsoc1_mclk_off\n");
+	mutex_lock(&mp_motsoc1_mclk_lock);
+	if (mp_motsoc1_mclk_in_use) {
+		clk_disable(mp_motsoc1_aux_clk);
+		pr_debug("motsoc1: clk_disable done!\n");
+		clk_put(mp_motsoc1_aux_clk);
+		mp_motsoc1_mclk_in_use = 0;
+		/*set to safe mode*/
+		set_motsoc1_fref_clk1_out_mode(0x7);
+	}
+	mutex_unlock(&mp_motsoc1_mclk_lock);
+	return;
+}
+
+static struct motsoc1_platform_data mp_motsoc1_data = {
+	.init = mapphone_motsoc1_initialization,
+	.exit = mapphone_motsoc1_exit,
+	.power_on = mapphone_motsoc1_power_on,
+	.power_off = mapphone_motsoc1_power_off,
+	.mclk_on = mapphone_motsoc1_mclk_on,
+	.mclk_off = mapphone_motsoc1_mclk_off,
+	.gpio_reset = -1,
+};
+
+static void __init mapphone_motsoc1_init(void)
+{
+	int gpio = -1;
+	pr_debug("mapphone_motsoc1_init\n");
+	gpio = get_gpio_by_name("motsoc1_reset");
+	pr_debug("%s motsoc1_reset is %d\n", __func__, gpio);
+	if (gpio > 0)
+		mp_motsoc1_data.gpio_reset = gpio;
+	else
+		printk(KERN_ERR"motsoc1_reset is not defined\n");
+	mutex_init(&mp_motsoc1_mclk_lock);
+	return;
+}
+
+struct platform_device motsoc1_platform_device = {
+	.name = "motsoc1",
+	.id = -1,
+	.dev = {
+		.platform_data = &mp_motsoc1_data,
+	},
+};
+#endif
+
 static void __init mapphone_init_early(void)
 {
 	omap2_init_common_infrastructure();
@@ -403,6 +518,12 @@ static struct i2c_board_info __initdata
 };
 
 static struct i2c_board_info __initdata mapphone_i2c_3_boardinfo[] = {
+#if defined(CONFIG_MOTSOC1)
+	{
+		I2C_BOARD_INFO("motsoc1", 0x1F),
+		.platform_data = &mp_motsoc1_data,
+	},
+#endif
 };
 
 static struct i2c_board_info __initdata mapphone_i2c_4_boardinfo[] = {
