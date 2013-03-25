@@ -80,7 +80,7 @@ static struct mux_logger_list_t *ts27010_mux_uart_logger_savedata(
 	struct mux_logger_list_t *mux_list = NULL;
 	u8 offset = 0;
 
-	mux_list = (struct mux_logger_list_t *)kzalloc(
+	mux_list = kzalloc(
 		sizeof(struct mux_logger_list_t), GFP_ATOMIC);
 	if (!mux_list) {
 		mux_print(MSG_ERROR, "can not malloc (%d) memory!\n",
@@ -92,7 +92,7 @@ static struct mux_logger_list_t *ts27010_mux_uart_logger_savedata(
 		offset = 1;
 	else
 		offset = 0;
-	mux_list->body = (u8 *)kmalloc(len + offset, GFP_ATOMIC);
+	mux_list->body = kmalloc(len + offset, GFP_ATOMIC);
 	if (!(mux_list->body)) {
 		kfree(mux_list);
 		mux_print(MSG_ERROR, "can not malloc (%d) memory!\n", len);
@@ -156,7 +156,7 @@ static void mux_backup_oldlogfile(
 			return;
 		}
 		size = stat.size;
-		buf = (u8 *)kmalloc(size, GFP_KERNEL);
+		buf = kmalloc(size, GFP_KERNEL);
 		if (!buf) {
 			mux_print(MSG_ERROR, "alloc buffer failed\n");
 			filp_close(ofp, NULL);
@@ -274,8 +274,7 @@ struct ts27010_mux_logger *ts27010_alloc_mux_logger(void)
 {
 	struct ts27010_mux_logger *mux_logger = NULL;
 
-	mux_logger = (struct ts27010_mux_logger *)kzalloc(
-		sizeof(struct ts27010_mux_logger), GFP_KERNEL);
+	mux_logger = kzalloc(sizeof(struct ts27010_mux_logger), GFP_KERNEL);
 	if (mux_logger == NULL) {
 		mux_print(MSG_ERROR, "alloc ts27010_mux_logger failed\n");
 		goto out;

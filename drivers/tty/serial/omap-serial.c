@@ -52,7 +52,12 @@
 #define UART_OMAP_IIR_RX_TIMEOUT	0xc
 #define PADCONF_SAFEMODE		0x7
 
+static int ste_uart_id = UART1;
+
 static struct uart_omap_port *ui[OMAP_MAX_HSUART_PORTS];
+
+extern int ste_in_tat_mode(void);
+extern int modem_is_ste_g4852(void);
 
 /* Forward declaration of functions */
 static void uart_tx_dma_callback(int lch, u16 ch_status, void *data);
@@ -370,12 +375,37 @@ static inline void serial_omap_enable_ier_thri(struct uart_omap_port *up)
 	}
 }
 
+static int  serial_omap_check_peer(struct uart_omap_port *up)
+{
+	struct omap_uart_port_info *info = up->pdev->dev.platform_data;
+	int ret = 0;
+
+	if (info->board_check_peer)
+		ret = info->board_check_peer(up);
+
+	return ret;
+}
+
 static void serial_omap_start_tx(struct uart_port *port)
 {
 	struct uart_omap_port *up = (struct uart_omap_port *)port;
 	struct circ_buf *xmit;
 	unsigned int start;
 	int ret = 0;
+
+	if (serial_omap_check_peer(up)) {
+#if 1
+		/*restore RTS after check BP status fail,or it
+		will block BP send URC*/
+		if (up->restore_autorts) {
+			serial_omap_port_enable(up);
+			up->restore_autorts = 0;
+			serial_omap_set_autorts(up, 1);
+			serial_omap_port_disable(up);
+		}
+#endif
+    return;
+	}
 
 	if (!up->use_dma) {
 		serial_omap_port_enable(up);
@@ -443,6 +473,25 @@ static void serial_omap_start_tx(struct uart_port *port)
 		serial_omap_set_autorts(up, 1);
 	}
 }
+
+int omap_uart_rts_status(int index)
+{
+	struct uart_omap_port *up = ui[index];
+	return up->restore_autorts;
+}
+EXPORT_SYMBOL(omap_uart_rts_status);
+bool omap_uart_is_suspended(int index)
+{
+	struct uart_omap_port *up = ui[index];
+	return up->suspended;
+}
+EXPORT_SYMBOL(omap_uart_is_suspended);
+void omap_uart_start_ipc_tx(int index)
+{
+	struct uart_omap_port *up = ui[index];
+	serial_omap_start_tx((struct uart_port *)up);
+}
+EXPORT_SYMBOL(omap_uart_start_ipc_tx);
 
 static unsigned int check_modem_status(struct uart_omap_port *up)
 {
@@ -624,6 +673,9 @@ static void serial_omap_set_autorts(struct uart_omap_port *p, int set)
 {
 	u8 lcr_val = 0, mcr_val = 0, efr_val = 0;
 	u8 lcr_backup = 0, mcr_backup = 0, efr_backup = 0;
+
+	if (ste_in_tat_mode() && (ste_uart_id == p->pdev->id))
+		return;
 
 	lcr_val = serial_in(p, UART_LCR);
 	lcr_backup = lcr_val;
@@ -1120,6 +1172,14 @@ static void serial_omap_wake_peer(struct uart_port *port)
 		up->wake_peer(port);
 }
 
+static void serial_omap_update_handshake(struct uart_omap_port *up, int status)
+{
+	struct omap_uart_port_info *info = up->pdev->dev.platform_data;
+
+	if (info->board_update_handshake)
+		info->board_update_handshake(up, status);
+}
+
 static void serial_omap_release_port(struct uart_port *port)
 {
 	dev_dbg(port->dev, "serial_omap_release_port+\n");
@@ -1384,6 +1444,8 @@ static int serial_omap_suspend(struct device *dev)
 	struct uart_omap_port *up = dev_get_drvdata(dev);
 	static unsigned int fifo_suspendbrks;
 	u8 lcr, efr;
+
+	serial_omap_update_handshake(up, 0);
 
 	if (up) {
 		if (up->rts_mux_driver_control) {
@@ -1864,6 +1926,9 @@ static int omap_serial_runtime_suspend(struct device *dev)
 
 	if (!up)
 		goto done;
+
+	if (modem_is_ste_g4852())
+		serial_omap_update_handshake(up, 0);
 
 	if (up->rts_mux_driver_control) {
 		omap_uart_enable_rtspullup(up);

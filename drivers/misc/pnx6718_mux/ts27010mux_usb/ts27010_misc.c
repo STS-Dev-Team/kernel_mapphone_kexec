@@ -50,34 +50,13 @@
 #ifdef DEBUG
 /***************************** mux log ********************************/
 int g_mux_usb_print_level;
+#ifdef DUMP_FRAME
 int g_mux_usb_dump_frame;
+int g_mux_usb_dump_seq;
 int g_mux_usb_dump_user_data;
+#endif
 
 static u8 s_hexdump_buf[TS0710MUX_SEND_BUF_SIZE * 3 + 2 + 64];
-
-/*/
-void mux_usb_hexdump(int level, const char *title,
-	const char *function, u32 line, const u8 *buf, u32 len)
-{
-	u32 i, j, size = TS0710MUX_SEND_BUF_SIZE * 3;
-	if (level < g_mux_usb_print_level)
-		return;
-
-	printk(KERN_WARNING "MUX_USB[%s:%d]: ", function, line);
-	printk(KERN_WARNING "%s - hexdump(len=%lu): ",
-		title, (unsigned long) len);
-	if (buf == NULL) {
-		printk(KERN_WARNING " [NULL]");
-	} else {
-		for (i = 0, j = 0; i < len && j < size; i++, j += 3)
-			//printk(KERN_WARNING " %02x ", buf[i]);
-			sprintf(s_hexdump_buf + j, " %02x", buf[i]);
-		s_hexdump_buf[j++] = '\n';
-		s_hexdump_buf[j] = '\0';
-		printk(KERN_WARNING "%s", s_hexdump_buf);
-	}
-}
-/*/
 
 void mux_usb_hexdump(int level, const char *title, const char *function,
 	u32 line, const u8 *buf, u32 len)
@@ -118,7 +97,6 @@ static int mux_proc_stat_read(char *page, char **start, off_t off,
 	ts27010_tty_usb_dump_io();
 	ts27010_ldisc_usb_drv_stat();
 	ts27010_mux_usb_mux_stat();
-/*/	modem_usb_dump_stat(); /*/
 
 	return len;
 }
@@ -152,7 +130,6 @@ static ssize_t mux_proc_stat_write(struct file *flip, const char __user *buff,
 			ts27010_tty_usb_dump_io_clear();
 			ts27010_ldisc_usb_drv_stat_clear();
 			ts27010_mux_usb_mux_stat_clear();
-/*/			modem_usb_dump_stat_clear(); /*/
 		}
 		ret = count;
 	}
@@ -171,10 +148,15 @@ static int mux_proc_read(char *page, char **start, off_t off,
 		return 0;
 	}
 
+#ifdef DUMP_FRAME
 	len += sprintf(page + len,
-		"print_level: %d, dump_frame: %d, dump_user_data: %d\n",
+		"print_level: %d, dump_frame: %d, "
+		"dump_user_data: %d, dump_seq: %d\n",
 		g_mux_usb_print_level, g_mux_usb_dump_frame,
-		g_mux_usb_dump_user_data);
+		g_mux_usb_dump_user_data, g_mux_usb_dump_seq);
+#else
+	len += sprintf(page + len, "print_level: %d\n", g_mux_usb_print_level);
+#endif
 
 	return len;
 }
@@ -211,6 +193,7 @@ static ssize_t mux_proc_write(struct file *flip, const char __user *buff,
 				"and the log level should be 0~%d",
 				(int)para, MSG_NONE);
 		}
+#ifdef DUMP_FRAME
 		startp = endp + 1;
 		para = simple_strtoul(startp, &endp, 10);
 		if (endp == startp) {
@@ -228,6 +211,16 @@ static ssize_t mux_proc_write(struct file *flip, const char __user *buff,
 		g_mux_usb_dump_user_data = para ? 1 : 0;
 		mux_print(MSG_INFO, "dump_user_data=%d",
 			g_mux_usb_dump_user_data);
+
+		startp = endp + 1;
+		para = simple_strtoul(startp, &endp, 10);
+		if (endp == startp) {
+			ret = count;
+			goto err;
+		}
+		g_mux_usb_dump_seq = para ? 1 : 0;
+		mux_print(MSG_INFO, "dump_seq=%d", g_mux_usb_dump_seq);
+#endif
 
 		ret = count;
 	}

@@ -44,6 +44,8 @@ struct ts27010_tty_channel_data {
 	int sent_size;
 	int recv_size;
 	int back_size;
+	int sent;
+	int recv;
 #endif
 };
 
@@ -59,7 +61,6 @@ static struct tty_driver *driver;
 #define TS0710MUX_MINOR_START 0
 
 #ifdef PROC_DEBUG_MUX_STAT
-static struct ts27010_tty_data *s_td;
 static int s_nWriteTotal;
 static int s_nWriteProt;
 static int s_nWriteCount;
@@ -70,10 +71,11 @@ static int s_nBackCount;
 void ts27010_tty_usb_dump_io_clear(void)
 {
 	int i;
+	struct ts27010_tty_data *td = driver->driver_state;
 	for (i = 0; i < TS0710_MAX_MUX; i++) {
-		s_td->chan[i].sent_size = 0;
-		s_td->chan[i].recv_size = 0;
-		s_td->chan[i].back_size = 0;
+		td->chan[i].sent_size = 0;
+		td->chan[i].recv_size = 0;
+		td->chan[i].back_size = 0;
 	}
 	s_nWriteTotal = 0;
 	s_nWriteProt = 0;
@@ -86,12 +88,13 @@ void ts27010_tty_usb_dump_io_clear(void)
 void ts27010_tty_usb_dump_io(void)
 {
 	int i;
+	struct ts27010_tty_data *td = driver->driver_state;
 	for (i = 0; i < TS0710_MAX_MUX; i++) {
 		mux_print(MSG_ERROR,
 			"(%d) refcount: %d, sent: %d, recv: %d, back: %d\n",
-			i, atomic_read(&s_td->chan[i].ref_count),
-			s_td->chan[i].sent_size, s_td->chan[i].recv_size,
-			s_td->chan[i].back_size);
+			i, atomic_read(&td->chan[i].ref_count),
+			td->chan[i].sent_size, td->chan[i].recv_size,
+			td->chan[i].back_size);
 	}
 	mux_print(MSG_ERROR, "Total writen size: %d, prot: %d, "
 		"total read size: %d\n",
@@ -112,9 +115,16 @@ static int tty_push(struct tty_struct *tty, u8 *buf, int len)
 			mux_print(MSG_WARNING,
 				"written size %d is not wanted %d\n",
 				count, len - sent);
+			/* should I call it? */
+			/* tty_flip_buffer_push(tty); */
+			msleep_interruptible(100);
+			if (signal_pending(current)) {
+				mux_print(MSG_ERROR, "but got signal, "
+					"push tty failed\n");
+				break;
+			}
 		}
 		sent += count;
-		/* tty_flip_buffer_push(tty); */
 	}
 	tty_flip_buffer_push(tty);
 	FUNC_EXIT();
@@ -410,6 +420,7 @@ static int ts27010_usb_tty_queue_recv_data(struct mux_recver_t *recver,
 	list_add_tail(&mux_list->list, &recver->m_datalist);
 #ifdef PROC_DEBUG_MUX_STAT
 	td->chan[line].recv_size += len;
+	td->chan[line].recv += len;
 	s_nRecvCount++;
 	s_nReadTotal += len;
 #endif
@@ -501,10 +512,21 @@ int ts27010_tty_usb_send_rbuf(int line, struct ts27010_ringbuf *rbuf,
 
 #ifdef PROC_DEBUG_MUX_STAT
 		td->chan[line].recv_size += len;
+		td->chan[line].recv += len;
 		s_nRecvCount++;
 		s_nReadTotal += len;
 #endif
 		tty_push(tty, buf, len);
+#ifdef DUMP_FRAME
+		if (g_mux_usb_dump_seq)
+			mux_print(MSG_INFO, "push %d into /dev/usb%d "
+				"tty buffer\n",
+				len, line + TS27010MUX_NAME_BASE);
+		else
+			mux_print(MSG_DEBUG, "push %d into /dev/usb%d "
+				"tty buffer\n",
+				len, line + TS27010MUX_NAME_BASE);
+#endif
 
 #ifdef PROC_DEBUG_MUX_STAT
 		td->chan[line].back_size += len;
@@ -535,7 +557,7 @@ static int ts27010_tty_open(struct tty_struct *tty, struct file *filp)
 		return -ENODEV;
 	}
 
-	mux_print(MSG_INFO, "tty index /dev/usb/%d will be opened by %s:%d\n",
+	mux_print(MSG_INFO, "tty index /dev/usb%d will be opened by %s:%d\n",
 		line + TS27010MUX_NAME_BASE, current->comm, current->pid);
 	if ((line < 0) || (line >= TS0710_MAX_MUX)) {
 		mux_print(MSG_ERROR, "tty index out of range: %d.\n", line);
@@ -554,6 +576,10 @@ static int ts27010_tty_open(struct tty_struct *tty, struct file *filp)
 		WARN_ON(tty != ts27010_usb_tty_table[line]);
 	} else {
 		td->chan[line].tty = tty;
+#ifdef PROC_DEBUG_MUX_STAT
+		td->chan[line].sent = 0;
+		td->chan[line].recv = 0;
+#endif
 		ts27010_usb_tty_table[line] = tty;
 		mux_print(MSG_INFO, "tty /dev/usb%d opened successfully\n",
 			line + TS27010MUX_NAME_BASE);
@@ -568,6 +594,21 @@ static int ts27010_tty_open(struct tty_struct *tty, struct file *filp)
 
 	FUNC_EXIT();
 	return 0;
+}
+
+void ts27010_tty_usb_reset_tty(int line)
+{
+	struct ts27010_tty_data *td = driver->driver_state;
+	mux_print(MSG_INFO, "reset tty /dev/usb%d while td: %p\n",
+		line + TS27010MUX_NAME_BASE, td);
+	if (td == NULL)
+		return;
+	if (line < 0 || line >= TS0710_MAX_MUX)
+		return;
+
+	atomic_set(&td->chan[line].ref_count, 0);
+	td->chan[line].tty = NULL;
+	ts27010_usb_tty_table[line] = NULL;
 }
 
 static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
@@ -595,6 +636,7 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 			atomic_read(&td->chan[line].ref_count));
 		atomic_set(&td->chan[line].ref_count, 0);
 	} else if (atomic_read(&td->chan[line].ref_count) > 1) {
+		ts27010_mux_usb_line_close(tty->index);
 		mux_print(MSG_WARNING,
 			"tty device: /dev/usb%d isn't closed "
 			"because of non-zero refcount\n",
@@ -603,6 +645,11 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 	} else {
 		ts27010_mux_usb_line_close(tty->index);
 
+#ifdef PROC_DEBUG_MUX_STAT
+		mux_print(MSG_INFO, "tty /dev/usb%d "
+			"sent: %d, recv: %d\n", line + TS27010MUX_NAME_BASE,
+			td->chan[line].sent, td->chan[line].recv);
+#endif
 		td->chan[line].tty = NULL;
 		ts27010_usb_tty_table[line] = NULL;
 		atomic_set(&td->chan[line].ref_count, 0);
@@ -615,9 +662,9 @@ static void ts27010_tty_close(struct tty_struct *tty, struct file *filp)
 		 *
 		 * I belive this is unecessary
 		 */
+		mux_print(MSG_INFO, "tty /dev/usb%d closed successfully\n",
+			line + TS27010MUX_NAME_BASE);
 	}
-	mux_print(MSG_INFO, "tty /dev/usb%d closed successfully\n",
-		line + TS27010MUX_NAME_BASE);
 	FUNC_EXIT();
 }
 
@@ -631,9 +678,16 @@ static int ts27010_tty_write(struct tty_struct *tty,
 		mux_print(MSG_ERROR, "tty index out of range: %d.\n", line);
 		return -ENODEV;
 	}
-	mux_print(MSG_DEBUG, "write /dev/usb%d %d by %s:%d\n",
-		line + TS27010MUX_NAME_BASE, count, current->comm, current->pid);
 #ifdef DUMP_FRAME
+	if (g_mux_usb_dump_seq)
+		mux_print(MSG_INFO, "write /dev/usb%d %d by %s:%d\n",
+			line + TS27010MUX_NAME_BASE, count,
+			current->comm, current->pid);
+	else
+		mux_print(MSG_DEBUG, "write /dev/usb%d %d by %s:%d\n",
+			line + TS27010MUX_NAME_BASE, count,
+			current->comm, current->pid);
+
 	if (g_mux_usb_dump_user_data)
 		mux_usb_hexdump(MSG_DEBUG, "dump tty_write",
 			__func__, __LINE__, buf, count);
@@ -647,6 +701,8 @@ static int ts27010_tty_write(struct tty_struct *tty,
 	if (ret == count) {
 		((struct ts27010_tty_data *)tty->driver->driver_state)
 			->chan[tty->index].sent_size += count;
+		((struct ts27010_tty_data *)tty->driver->driver_state)
+			->chan[tty->index].sent += count;
 		s_nWriteTotal += count;
 		s_nWriteProt += count + (count < 128 ? 6 : 7);
 		s_nWriteCount++;
@@ -708,7 +764,7 @@ static void ts27010_tty_unthrottle(struct tty_struct *tty)
 	FUNC_EXIT();
 }
 
-static int ts27010_tty_ioctl(struct tty_struct *tty, struct file *file,
+static int ts27010_tty_ioctl(struct tty_struct *tty,
 		     unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -783,7 +839,6 @@ int ts27010_tty_usb_init(void)
 #endif /* USB_QUEUE_RECV */
 
 #ifdef PROC_DEBUG_MUX_STAT
-	s_td = NULL;
 	s_nWriteTotal = 0;
 	s_nWriteProt = 0;
 	s_nWriteCount = 0;
@@ -820,9 +875,6 @@ int ts27010_tty_usb_init(void)
 	}
 
 	driver->driver_state = td;
-#ifdef PROC_DEBUG_MUX_STAT
-	s_td = td;
-#endif
 
 	driver->driver_name = "td_ts0710mux_usb";
 	driver->name = "usb";
