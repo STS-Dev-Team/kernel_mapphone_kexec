@@ -25,18 +25,31 @@
 #include <linux/delay.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/wakelock.h>
+#include <linux/reboot.h>
+#ifdef CONFIG_PNX6718_CTRL
+#include <linux/radio_ctrl/pnx6718_ctrl.h>
+#endif
+
 
 #include "ts27010.h"
 #include "ts27010_mux.h"
 #include "ts27010_ringbuf.h"
 #include "ts27010_misc.h"
+#include <mach/gpio.h>
+#define MUX_USB_NEED_TTY
 
+#ifndef MUX_USB_NEED_TTY
+/* #include "" */
+#endif
+#define AP_LCD_STATUS 52
 struct ts27010_ldisc_data {
 	struct ts27010_ringbuf		*rbuf;
 	struct delayed_work		recv_work;
 	spinlock_t			recv_lock; /* ldisc read lock */
-	struct mutex			send_lock; /* ldisc write lock */
+	spinlock_t			send_lock; /* ldisc write lock */
 	atomic_t 			ref_count;
+	struct wake_lock		wake_lock;
 };
 
 #ifdef PROC_DEBUG_MUX_STAT
@@ -44,7 +57,7 @@ int g_nStatDrvIO;
 static int s_nDrvRecved;
 static int s_nUSBRecved;
 static int s_nDrvSent;
-
+extern void modem_notifiy_user(void);
 void ts27010_ldisc_usb_drv_stat_clear(void)
 {
 	s_nDrvSent = 0;
@@ -61,11 +74,15 @@ void ts27010_ldisc_usb_drv_stat(void)
 
 #define RECV_RUNNING 0
 #define MUX_USB_RESERVE_BUFFERSIZE (5 * DEF_TS0710_MTU)
+#define MUX_USB_WAKELOCK_TIMEOUT (6 * HZ)
 
 static unsigned long s_mux_recv_flags;
 static int s_bFC_USB;
 static int s_bHold;
 static struct ts27010_ldisc_data *s_ld;
+#ifdef CONFIG_PNX6718_CTRL
+static int s_BP_RESET_DETECTED;
+#endif
 
 static void ts27010_ldisc_recv_worker(struct work_struct *work)
 {
@@ -84,11 +101,12 @@ static void ts27010_ldisc_recv_worker(struct work_struct *work)
 		return;
 	}
 	/* TODO: should have a *mux to pass around */
-	ts27010_mux_usb_recv(s_ld->rbuf);
+	ts27010_mux_usb_recv(&s_ld->recv_lock, s_ld->rbuf);
 
 	spin_lock_irqsave(&s_ld->recv_lock, flags);
 	left = ts27010_ringbuf_room(s_ld->rbuf);
 	spin_unlock_irqrestore(&s_ld->recv_lock, flags);
+#ifdef MUX_USB_NEED_TTY
 	if (s_bFC_USB && left > MUX_USB_RESERVE_BUFFERSIZE) {
 		mux_print(MSG_ERROR, "MUX stop flow control USB\n");
 		s_bFC_USB = 0;
@@ -98,56 +116,151 @@ static void ts27010_ldisc_recv_worker(struct work_struct *work)
 			ts27010mux_usb_tty->driver->ops->unthrottle(
 				ts27010mux_usb_tty);
 	}
+#else
+	/* TODO: how to throttle/unthrottle USB? */
+#endif
 	clear_bit(RECV_RUNNING, &s_mux_recv_flags);
 
 	FUNC_EXIT();
 }
 
+/* max retry time: 100 * 100ms = 10 secs */
+#define MAX_RETRY_LIMIT 300
+
 int ts27010_ldisc_usb_send(struct tty_struct *tty, u8 *data, int len)
 {
 	int sent = 0;
-	int n;
+	int retry = 0;
+	int n = -999;
+#ifdef MUX_USB_NEED_TTY
+	unsigned long flags;
+	int (*tty_write)(struct tty_struct *, const u8 *, int) = NULL;
 	FUNC_ENTER();
-
+	spin_lock_irqsave(&s_ld->send_lock, flags);
 	if (tty == NULL || tty->disc_data == NULL) {
 		mux_print(MSG_ERROR,
 			"try to send mux data while ttyUSB0 is closed.\n");
+		spin_unlock_irqrestore(&s_ld->send_lock, flags);
 		return -ENODEV;
+	} else {
+		tty_write = tty->driver->ops->write;
 	}
+	spin_unlock_irqrestore(&s_ld->send_lock, flags);
 	WARN_ON(tty->disc_data != s_ld);
 	WARN_ON(tty != ts27010mux_usb_tty);
 
-	if (tty->driver->ops->write_room
-		&& tty->driver->ops->write_room(tty) < len) {
-		mux_print(MSG_ERROR,
-			"******** write overflow ******** \n");
-		mux_print(MSG_ERROR, "no room for writing, "
-			"request %d, but left %d\n", len,
-			tty->driver->ops->write_room(tty));
-		return -EAGAIN;
-	}
-
 	while (sent < len && ts27010mux_usb_tty) {
-		n = tty->driver->ops->write(tty, data + sent, len - sent);
-		if (n <= 0) {
-			mux_print(MSG_ERROR, "write usb failed: %d-%d-%d\n",
-				n, sent, len);
-			mux_usb_hexdump(MSG_ERROR, "send frame failed",
-				__func__, __LINE__, data, len);
+		if ((data[1] >> 2 == 0) /* we can't block channel 0 */
+			|| (data[2] != UIH) /* we can't block non-UIH */
+			|| ts27010_mux_usb_dlci_is_connected(data[1] >> 2)) {
+
+			n = tty_write(tty, data + sent, len - sent);
+
+			if (n <= 0) {
+				if ((n == -ENODEV) || (n == -ENOENT))
+					return 0;
+				++retry;
+				mux_print(MSG_INFO,
+					"write usb failed: %d-%d-%d-%d\n",
+					n, sent, len, retry);
+				msleep_interruptible(200);
+				if (signal_pending(current)) {
+					mux_print(MSG_ERROR, "but got signal, "
+						"send failed\n");
+					if (-EBUSY == n)
+						msleep(100);
+					return 0;
+				}
+				if (retry == 50) {
+					s_bHold = 1;
+					mux_print(MSG_INFO,
+						"lock muxusb_reconnect\n");
+					wake_lock_timeout(&s_ld->wake_lock,
+						MUX_USB_WAKELOCK_TIMEOUT);
+
+					modem_notifiy_user();
+					msleep(50);
+					gpio_set_value(AP_LCD_STATUS, 0);
+					msleep(50);
+					gpio_set_value(AP_LCD_STATUS, 1);
+					printk(KERN_INFO "trigger GPIO %d and "
+						"wait BP to disconnect\n",
+						AP_LCD_STATUS);
+					msleep(1000);
+					return 0;
+				}
+				continue;
+			} else if (n < len) {
+				mux_print(MSG_WARNING,
+					"partially write %d-%d-%d\n",
+					n, sent, len);
+			}
+			sent += n;
+		} else {
+			mux_print(MSG_WARNING,
+				"dlci %d not connected, discard data:%d-%d\n",
+				data[1] >> 2, sent, len);
 			break;
-		} else if (n < len) {
-			mux_print(MSG_WARNING, "partially write %d\n", n);
 		}
-		sent += n;
+	}
+	if (sent < len) {
+		mux_print(MSG_ERROR, "write usb failed: %d-%d-%d-%d\n",
+			n, sent, len, retry);
+		if (n == -12)
+			return 0;
+		mux_usb_hexdump(MSG_ERROR, "send frame failed",
+			__func__, __LINE__, data, len);
+		/* TODO: should trigger a panic or reset BP */
+		return 0;
 	}
 	if (!ts27010mux_usb_tty) {
 		mux_print(MSG_ERROR, "try to send mux data "
 			"while ttyUSB0 is closed.\n");
-		mux_print(MSG_ERROR, "sent = %d\n", sent);
+		mux_print(MSG_ERROR, "sent = %d, len = %d\n", sent, len);
+		/* TODO: should trigger a panic or reset BP */
+	}
+#else /* MUX_USB_NEED_TTY */
+	while (sent < len) {
+		if (ts27010_mux_usb_dlci_is_connected(data[1] >> 2)
+			|| (data[1] >> 2 == 0) || (data[2] != UIH)) {
+			n = td_usb_tty_write(data + sent, len - sent);
+			if (n <= 0) {
+				if (n == -ENODEV)
+					break;
+				++retry;
+				mux_print(MSG_INFO,
+					"write usb failed: %d-%d-%d-%d\n",
+					n, sent, len, retry);
+				msleep_interruptible(100);
+				if (signal_pending(current)) {
+					mux_print(MSG_ERROR, "but got signal, "
+						"send failed\n");
+					break;
+				}
+				continue;
+			} else if (n < len) {
+				mux_print(MSG_WARNING,
+					"partially write %d-%d-%d\n",
+					n, sent, len);
+			}
+			sent += n;
+		} else {
+			mux_print(MSG_WARNING,
+				"dlci %d not connected, discard data:%d-%d\n",
+				data[1] >> 2, sent, len);
+			break;
+		}
+	}
+	if (sent < len) {
+		mux_print(MSG_ERROR, "write usb failed: %d-%d-%d-%d\n",
+			n, sent, len, retry);
 		mux_usb_hexdump(MSG_ERROR, "send frame failed",
 			__func__, __LINE__, data, len);
 		/* TODO: should trigger a panic or reset BP */
+		return 0;
 	}
+#endif /* MUX_USB_NEED_TTY */
+
 #ifdef PROC_DEBUG_MUX_STAT
 	if (g_nStatDrvIO)
 		s_nDrvSent += sent;
@@ -158,14 +271,28 @@ int ts27010_ldisc_usb_send(struct tty_struct *tty, u8 *data, int len)
 	return sent;
 }
 
+int ts27010_ldisc_usb_is_hold(void)
+{
+	return s_bHold;
+}
+
 /*
  * Called when a tty is put into tx27010mux line discipline. Called in process
  * context.
  */
 static int ts27010_ldisc_open(struct tty_struct *tty)
 {
+#ifdef MUX_USB_NEED_TTY
 	int err = 0;
+#endif
 	FUNC_ENTER();
+
+	if (strcmp(current->comm, "rild") != 0) {
+		mux_print(MSG_WARNING,
+			"ignore non-rild %s:%d set the line discipline\n",
+			current->comm, current->pid);
+		return 0;
+	}
 
 	if (ts27010mux_usb_tty) {
 		atomic_inc(&s_ld->ref_count);
@@ -173,6 +300,7 @@ static int ts27010_ldisc_open(struct tty_struct *tty)
 			current->comm, current->pid);
 		return 0;
 	}
+#ifdef MUX_USB_NEED_TTY
 	if (tty && tty->driver) {
 		mux_print(MSG_INFO, "(%s:%d) set driver_name: %s, "
 			"driver: %s to mux usb ldisc\n",
@@ -190,6 +318,8 @@ static int ts27010_ldisc_open(struct tty_struct *tty)
 #ifndef MUX_USB_UT
 	if (s_bHold) {
 		ts27010_mux_usb_mux_resume();
+		mux_print(MSG_INFO, "unlock muxusb_reconnect\n");
+		wake_unlock(&s_ld->wake_lock);
 		s_bHold = 0;
 	} else {
 		err = ts27010_mux_usb_mux_open();
@@ -198,6 +328,7 @@ static int ts27010_ldisc_open(struct tty_struct *tty)
 	}
 #endif
 	tty->disc_data = s_ld;
+#endif /* MUX_USB_NEED_TTY */
 	atomic_inc(&s_ld->ref_count);
 
 	/* TODO: goes away with clean tty interface */
@@ -206,9 +337,11 @@ static int ts27010_ldisc_open(struct tty_struct *tty)
 	FUNC_EXIT();
 	return 0;
 
+#ifdef MUX_USB_NEED_TTY
 err1:
 	tty->disc_data = NULL;
 	return err;
+#endif
 }
 
 /*
@@ -221,6 +354,9 @@ err1:
  */
 static void ts27010_ldisc_close(struct tty_struct *tty)
 {
+#ifdef MUX_USB_NEED_TTY
+	unsigned long flags;
+#endif
 	FUNC_ENTER();
 
 	atomic_dec(&s_ld->ref_count);
@@ -236,13 +372,14 @@ static void ts27010_ldisc_close(struct tty_struct *tty)
 			current->comm, current->pid);
 		return;
 	}
+#ifdef MUX_USB_NEED_TTY
 	if (tty && tty->driver) {
 		mux_print(MSG_INFO, "driver_name: %s, "
 			"driver: %s close mux usb ldisc\n",
 			tty->driver->driver_name, tty->driver->name);
 	}
 
-	mutex_lock(&s_ld->send_lock);
+	spin_lock_irqsave(&s_ld->send_lock, flags);
 	/* TODO: goes away with clean tty interface */
 	ts27010mux_usb_tty = NULL;
 	atomic_set(&s_ld->ref_count, 0);
@@ -256,9 +393,19 @@ static void ts27010_ldisc_close(struct tty_struct *tty)
 		mux_print(MSG_INFO, "process %s(%d) close MUX line discipline\n",
 			current->comm, current->pid);
 	}
+#endif /* MUX_USB_UT */
+
+#ifdef CONFIG_PNX6718_CTRL
+	if (s_BP_RESET_DETECTED)
+		s_BP_RESET_DETECTED = 0;
 #endif
+
 	tty->disc_data = NULL;
-	mutex_unlock(&s_ld->send_lock);
+	spin_unlock_irqrestore(&s_ld->send_lock, flags);
+#else /* MUX_USB_NEED_TTY */
+	ts27010mux_usb_tty = NULL;
+	atomic_set(&s_ld->ref_count, 0);
+#endif /* MUX_USB_NEED_TTY */
 	FUNC_EXIT();
 }
 
@@ -271,8 +418,16 @@ static void ts27010_ldisc_close(struct tty_struct *tty)
 static int ts27010_ldisc_hangup(struct tty_struct *tty)
 {
 	FUNC_ENTER();
-	/* /dev/ttyUBS0 disconnected */
-	s_bHold = 1;
+#ifdef CONFIG_PNX6718_CTRL
+	if (!s_BP_RESET_DETECTED) {
+#endif
+		/* /dev/ttyUBS0 disconnected */
+		s_bHold = 1;
+		mux_print(MSG_INFO, "lock muxusb_reconnect\n");
+		wake_lock_timeout(&s_ld->wake_lock, MUX_USB_WAKELOCK_TIMEOUT);
+#ifdef CONFIG_PNX6718_CTRL
+	}
+#endif
 	ts27010_ldisc_close(tty);
 	FUNC_EXIT();
 	return 0;
@@ -360,14 +515,22 @@ void ts27010_ldisc_usb_receive(struct tty_struct *tty,
 		mux_print(MSG_ERROR, "no ring buffer allocated\n");
 		return;
 	}
+#ifdef MUX_USB_NEED_TTY
 	WARN_ON(tty != ts27010mux_usb_tty);
+#endif
 
 #ifdef PROC_DEBUG_MUX_STAT
 	if (g_nStatDrvIO)
 		s_nUSBRecved += count;
 #endif
 	/* save data */
-	mux_print(MSG_DEBUG, "rx %d from BP\n", count);
+#ifdef DUMP_FRAME
+	if (g_mux_usb_dump_seq)
+		mux_print(MSG_INFO, "rx %d from BP\n", count);
+	else
+		mux_print(MSG_DEBUG, "rx %d from BP\n", count);
+#endif
+
 	spin_lock_irqsave(&s_ld->recv_lock, flags);
 	n = ts27010_ringbuf_write(s_ld->rbuf, data, count);
 #ifdef PROC_DEBUG_MUX_STAT
@@ -376,6 +539,7 @@ void ts27010_ldisc_usb_receive(struct tty_struct *tty,
 #endif
 	left = ts27010_ringbuf_room(s_ld->rbuf);
 	spin_unlock_irqrestore(&s_ld->recv_lock, flags);
+#ifdef MUX_USB_NEED_TTY
 	if (left <= MUX_USB_RESERVE_BUFFERSIZE) {
 		mux_print(MSG_ERROR, "MUX start flow control USB\n");
 		s_bFC_USB = 1;
@@ -384,6 +548,9 @@ void ts27010_ldisc_usb_receive(struct tty_struct *tty,
 			&& tty->driver->ops->throttle)
 			tty->driver->ops->throttle(tty);
 	}
+#else /* MUX_USB_NEED_TTY */
+	/* TODO: how to throttle/unthrottle usb? */
+#endif /* MUX_USB_NEED_TTY */
 
 	if (n < count) {
 		mux_print(MSG_ERROR, "*** buffer overrun. "
@@ -418,6 +585,13 @@ void ts27010_ldisc_usb_receive(struct tty_struct *tty,
 	FUNC_EXIT();
 }
 
+#ifndef MUX_USB_NEED_TTY
+static void ts27010_ldisc_usb_read(const u8 *data, int len)
+{
+	ts27010_ldisc_usb_receive(NULL, data, NULL, len);
+}
+#endif
+
 static void ts27010_ldisc_wakeup(struct tty_struct *tty)
 {
 	FUNC_ENTER();
@@ -439,6 +613,25 @@ static struct tty_ldisc_ops ts27010_ldisc = {
 	.receive_buf = ts27010_ldisc_usb_receive,
 	.write_wakeup = ts27010_ldisc_wakeup,
 };
+
+#ifdef CONFIG_PNX6718_CTRL
+void ts27010_mux_usb_on_wdi_intr(void)
+{
+	FUNC_ENTER();
+	mux_print(MSG_INFO, "mux got bp reset\n");
+	if (ts27010mux_usb_tty) {
+		mux_print(MSG_INFO, "hangup called\n");
+		s_BP_RESET_DETECTED = 1;
+		s_bHold = 0;
+	}
+	FUNC_EXIT();
+}
+
+static struct td_bp_ext_interface s_mux_usb_intf = {
+	.name = (const char *)"ts27010_mux_usb_ctrl",
+	.on_wdi_interrupt =  ts27010_mux_usb_on_wdi_intr,
+};
+#endif
 
 int ts27010_ldisc_usb_init(void)
 {
@@ -470,15 +663,29 @@ int ts27010_ldisc_usb_init(void)
 		goto err1;
 	}
 
-	mutex_init(&s_ld->send_lock);
+	s_ld->send_lock = __SPIN_LOCK_UNLOCKED(s_ld->send_lock);
 	s_ld->recv_lock = __SPIN_LOCK_UNLOCKED(s_ld->recv_lock);
 	INIT_DELAYED_WORK(&s_ld->recv_work, ts27010_ldisc_recv_worker);
 	atomic_set(&s_ld->ref_count, 0);
+	wake_lock_init(&s_ld->wake_lock, WAKE_LOCK_SUSPEND, "muxusb_reconnect");
+
+#ifdef CONFIG_PNX6718_CTRL
+	s_BP_RESET_DETECTED = 0;
+	err = td_bp_register_ext_interface(&s_mux_usb_intf);
+	if (err)
+		mux_print(MSG_ERROR, "register interface to td_ctrl failed\n");
+#endif
 
 	err = tty_register_ldisc(N_TD_TS2710_USB, &ts27010_ldisc);
 	if (err < 0)
 		mux_print(MSG_ERROR,
 			"ts27010: unable to register line discipline\n");
+
+#ifndef MUX_USB_NEED_TTY
+	ts27010_ldisc_open((struct tty_struct *)1);
+
+	td_usb_register_callback(ts27010_ldisc_usb_read);
+#endif
 
 	FUNC_EXIT();
 	return err;
@@ -493,7 +700,12 @@ err0:
 void ts27010_ldisc_usb_remove(void)
 {
 	FUNC_ENTER();
+#ifndef MUX_USB_NEED_TTY
+	ts27010_ldisc_close((struct tty_struct *)1);
+#endif
+
 	tty_unregister_ldisc(N_TD_TS2710_USB);
+	wake_lock_destroy(&s_ld->wake_lock);
 	ts27010_ringbuf_free(s_ld->rbuf);
 	kfree(s_ld);
 	FUNC_EXIT();

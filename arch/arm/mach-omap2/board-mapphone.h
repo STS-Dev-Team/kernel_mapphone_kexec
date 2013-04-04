@@ -47,6 +47,15 @@ extern void __init mapphone_usbhost_init(void);
 extern int __init mapphone_mdm_ctrl_init(void);
 extern struct attribute_group *mapphone_touch_vkey_prop_attr_group;
 
+extern int modem_is_ste_pnx6718(void);
+extern void omap_uart_start_ste_ipc_tx(int index);
+extern int modem_is_ste_g4852(void);
+extern int get_ste_bplog_mode(void);
+extern void omap_uart_trace_set_ap_ready(void);
+
+extern int mapphone_ste_log_wake_enable(void);
+extern int mapphone_ste_log_wake_disable(void);
+
 struct omap_ion_platform_data;
 void mapphone_android_display_setup(struct omap_ion_platform_data *ion);
 

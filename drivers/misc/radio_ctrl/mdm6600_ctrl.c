@@ -298,9 +298,24 @@ static void set_bp_resin(int on)
 static void update_bp_status(void)
 {
 	int bp_status_prev_idx = bp_status_idx;
+	int i;
 	int bp_power_prev_idx = bp_power_idx;
 
 	bp_status_idx = get_bp_status();
+	/* No CDMA network when first power on after upgrade the software,
+	 * because the bp status is not right, so wait for bp ready status
+	 * when first powerup, becaue BP will execute restore RF. It will
+	 * take about 30~40 seconds, so AP should wait 50s for the bp status
+	 * changes from undefined status to awake status.
+	 */
+	if (bp_status_prev_idx == BP_STATUS_UNDEFINED) {
+		for (i = 0; i < 100; i++) {
+			if (bp_status_idx != BP_STATUS_PANIC)
+				break;
+			msleep(500);
+			bp_status_idx = get_bp_status();
+		}
+	}
 	bp_power_idx = get_bp_power_status();
 
 	if (bp_power_idx == bp_power_prev_idx)

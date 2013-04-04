@@ -400,7 +400,9 @@ static void ts0710_init(struct ts0710_con *ts0710)
 	ts0710->be_testing = 0;
 
 	for (j = 0; j < TS0710_MAX_MUX; j++)
-		mutex_init(&ts0710->chan[j].write_lock);
+		/* mutex_init(&ts0710->chan[j].write_lock); */
+		ts0710->chan[j].write_lock =
+			__SPIN_LOCK_UNLOCKED(ts0710->chan[j].write_lock);
 
 	FUNC_EXIT();
 }
@@ -1641,8 +1643,15 @@ static int ts27010_open_channel(u8 dlci)
 			mux_print(MSG_INFO, "wait for 0x%x opened\n", dlci);
 
 			retval = ts27010_wait_for_open(ts0710, dlci);
-			if (retval == -ETIMEDOUT)
+			if (retval == -ETIMEDOUT && (try > 8)) {
+				printk(KERN_WARNING "sabm package failed\n, "
+					"disconnect then\n");
+				ts27010_send_disc(ts0710, dlci);
+				wait_event_interruptible_timeout(d->close_wait,
+				0, TS0710MUX_TIME_OUT);
+				d->state = CONNECTING;
 				continue;
+			}
 			break;
 		}
 	}
@@ -1741,8 +1750,9 @@ static int ts27010_open_ctrl_channel(int dlci)
 		}
 		mux_print(MSG_DEBUG, "wait for DLCI %d opened\n", dlci);
 		retval = ts27010_wait_for_open(ts0710, dlci);
-		if (retval == -ETIMEDOUT)
+		if (retval == -ETIMEDOUT) {
 			continue;
+		}
 		else if (!retval) {
 			mux_print(MSG_INFO, "DLCI %d connected!\n", dlci);
 			d->clients++;
@@ -1750,7 +1760,13 @@ static int ts27010_open_ctrl_channel(int dlci)
 		} else
 			break;
 	}
-
+	if (-ETIMEDOUT == retval) {
+		printk(KERN_WARNING
+			"BP disconnected the devices DLCI0 still openned?\n");
+		d->clients++;
+		d->state = CONNECTED;
+		retval = 0;
+	}
 	if (try < 0 && d->state != CONNECTED && d->state != FLOW_STOPPED) {
 		mux_print(MSG_ERROR, "open DLCI 0 failed: %d\n",
 			d->state);
@@ -1832,6 +1848,7 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 	int correct_ttyidx;
 	int mtu;
 	int sent = 0;
+	unsigned long flags;
 
 	FUNC_ENTER();
 
@@ -1862,11 +1879,14 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 
 	while (sent < count) {
 		/* workground for ttyUSB0 hangup */
-		if (ts0710->dlci[dlci].state == HOLD_CONNECTED
-			|| ts0710->dlci[dlci].state == HOLD_FLOW_STOPPED) {
+		if (ts0710->dlci[dlci].state == HOLD_FLOW_STOPPED
+			|| (ts0710->dlci[dlci].state == HOLD_CONNECTED
+			&& (dlci < 1 || dlci > 3))) {
+			/* don't cache data for PS data channels */
 			mux_print(MSG_INFO,
-				"/dev/usb%d is being held\n",
-				line + TS27010MUX_NAME_BASE);
+				"/dev/usb%d is being held: %d\n",
+				line + TS27010MUX_NAME_BASE,
+				ts0710->dlci[dlci].state);
 			return -EDISCONNECTED;
 			/*
 			wait_event_interruptible(
@@ -1891,6 +1911,15 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 			mux_print(MSG_INFO, "Flow stopped on all channels, "
 				"including /dev/usb%d\n",
 				line + TS27010MUX_NAME_BASE);
+			if (dlci >= 4 && dlci <= 6) {
+				/*
+				 * not block if ps channels writing
+				 * since spinlock before ppp_write
+				 */
+				mux_print(MSG_INFO, "returned on /dev/usb%d\n",
+					line + TS27010MUX_NAME_BASE);
+				return -EBUSY;
+			}
 			wait_event_interruptible(
 				ts0710->dlci[0].mux_write_wait,
 				ts0710->dlci[0].state != FLOW_STOPPED);
@@ -1910,6 +1939,15 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 			mux_print(MSG_INFO,
 				"Flow stopped on /dev/usb%d\n",
 				line + TS27010MUX_NAME_BASE);
+			if (dlci >= 4 && dlci <= 6) {
+				/*
+				 * not block if ps channels writing
+				 * since spinlock before ppp_write
+				 */
+				mux_print(MSG_INFO, "returned on /dev/usb%d\n",
+					line + TS27010MUX_NAME_BASE);
+				return -EBUSY;
+			}
 			wait_event_interruptible(
 				ts0710->dlci[dlci].mux_write_wait,
 				ts0710->dlci[dlci].state != FLOW_STOPPED);
@@ -1925,12 +1963,17 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 				return -EDISCONNECTED;
 			}
 		}
-		if (ts0710->dlci[dlci].state == CONNECTED) {
+		if (ts0710->dlci[dlci].state == CONNECTED
+			|| (ts0710->dlci[dlci].state == HOLD_CONNECTED
+			&& (dlci >= 1 && dlci <= 3))) {
+			/* cache data for PS ctrl channels even in hold state */
 			int n = ((count - sent) > mtu) ? mtu : (count - sent);
 			mux_print(MSG_DEBUG, "preparing to write %d bytes "
 				"to /dev/usb%d\n",
 				n, line + TS27010MUX_NAME_BASE);
-			mutex_lock(&ts0710->chan[line].write_lock);
+			/* mutex_lock(&ts0710->chan[line].write_lock); */
+			spin_lock_irqsave(&ts0710->chan[line].write_lock,
+				flags);
 
 			err = ts27010_send_uih(
 				ts0710, dlci, ts0710->chan[line].buf,
@@ -1940,11 +1983,13 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 
 			sent += n;
 
-			mutex_unlock(&ts0710->chan[line].write_lock);
+			/* mutex_unlock(&ts0710->chan[line].write_lock); */
+			spin_unlock_irqrestore(&ts0710->chan[line].write_lock,
+				flags);
 		} else {
 			mux_print(MSG_WARNING,
-				"write on DLCI %d while not connected\n",
-				dlci);
+				"write on DLCI %d while not connected: %d\n",
+				dlci, ts0710->dlci[dlci].state);
 			return -EDISCONNECTED;
 		}
 	}
@@ -1957,7 +2002,8 @@ int ts27010_mux_usb_line_write(int line, const unsigned char *buf, int count)
 	return count;
 
 ERR:
-	mutex_unlock(&ts0710->chan[line].write_lock);
+	/* mutex_unlock(&ts0710->chan[line].write_lock); */
+	spin_unlock_irqrestore(&ts0710->chan[line].write_lock, flags);
 
 	return err;
 }
@@ -1976,7 +2022,7 @@ int ts27010_mux_usb_line_chars_in_buffer(int line)
 	dlci = tty2dlci[line];
 	if (!ts0710_valid_dlci(dlci)) {
 		mux_print(MSG_ERROR, "invalid DLCI %d\n", dlci);
-		goto out;
+		return -ENODEV;
 	}
 	if (ts0710->dlci[0].state == FLOW_STOPPED) {
 		mux_print(MSG_WARNING, "Flow stopped on all channels,"
@@ -1987,7 +2033,8 @@ int ts27010_mux_usb_line_chars_in_buffer(int line)
 			"Flow stopped, returning MAX chars in buffer\n");
 		goto out;
 	} else if (ts0710->dlci[dlci].state != CONNECTED) {
-		mux_print(MSG_ERROR, "DLCI %d not connected\n", dlci);
+		mux_print(MSG_ERROR, "DLCI %d not connected: %d\n", dlci,
+			ts0710->dlci[dlci].state);
 		goto out;
 	}
 
@@ -2022,7 +2069,7 @@ int ts27010_mux_usb_line_write_room(int line)
 	dlci = tty2dlci[line];
 	if (!ts0710_valid_dlci(dlci)) {
 		mux_print(MSG_ERROR, "invalid DLCI %d\n", dlci);
-		goto out;
+		return -ENODEV;
 	}
 	if (ts0710->dlci[0].state == FLOW_STOPPED) {
 		mux_print(MSG_WARNING,
@@ -2032,7 +2079,8 @@ int ts27010_mux_usb_line_write_room(int line)
 		mux_print(MSG_WARNING, "Flow stopped, returning ZERO\n");
 		goto out;
 	} else if (ts0710->dlci[dlci].state != CONNECTED) {
-		mux_print(MSG_ERROR, "DLCI %d not connected\n", dlci);
+		mux_print(MSG_ERROR, "DLCI %d not connected: %d\n", dlci,
+			ts0710->dlci[dlci].state);
 		goto out;
 	}
 
@@ -2315,6 +2363,7 @@ void ts27010_mux_usb_mux_close(void)
 			 */
 		}
 		ts0710_reset_dlci_data(d);
+		ts27010_tty_usb_reset_tty(dlci2tty[j] - TS27010MUX_NAME_BASE);
 		/*/
 		wake_up_interruptible(&d->open_wait);
 		wake_up_interruptible(&d->close_wait);
@@ -2326,6 +2375,16 @@ void ts27010_mux_usb_mux_close(void)
 #endif
 
 	FUNC_EXIT();
+}
+
+int ts27010_mux_usb_dlci_is_connected(u8 dlci)
+{
+	if (!ts0710_valid_dlci(dlci))
+		return 0;
+
+	return ts0710_connection.dlci[dlci].state != FLOW_STOPPED
+		&& ts0710_connection.dlci[dlci].state != HOLD_CONNECTED
+		&& ts0710_connection.dlci[dlci].state != HOLD_FLOW_STOPPED;
 }
 
 #ifdef PROC_DEBUG_MUX_STAT
@@ -2375,7 +2434,8 @@ static void ts27010_mux_dump_ringbuf(
 	}
 }
 
-void ts27010_mux_usb_recv(struct ts27010_ringbuf *rbuf)
+void ts27010_mux_usb_recv(spinlock_t *recv_lock,
+	struct ts27010_ringbuf *rbuf)
 {
 	int i;
 	u8 c;
@@ -2515,6 +2575,12 @@ void ts27010_mux_usb_recv(struct ts27010_ringbuf *rbuf)
 			len = c >> 1;
 			if (c & 0x1) {
 				data_idx = i + 1;
+				if ((len + data_idx + 1) >= count) {
+					mux_print(MSG_INFO,
+						"partial frame: %d-%d-%d, "
+						"wait ...\n", len,
+						len + data_idx + 1, count);
+				}
 				mux_print(MSG_MSGDUMP,
 					"state transit: %02x LEN->DATA\n",
 					len);
@@ -2658,7 +2724,12 @@ void ts27010_mux_usb_recv(struct ts27010_ringbuf *rbuf)
 	if (g_nStatDrvIO)
 		s_nMuxConsumed += consume_idx + 1;
 #endif
-	ts27010_ringbuf_consume(rbuf, consume_idx + 1);
+	{
+		unsigned long flags;
+		spin_lock_irqsave(recv_lock, flags);
+		ts27010_ringbuf_consume(rbuf, consume_idx + 1);
+		spin_unlock_irqrestore(recv_lock, flags);
+	}
 
 	FUNC_EXIT();
 }
@@ -2671,8 +2742,11 @@ static int __init mux_init(void)
 
 	/*/ MSG_MSGDUMP; MSG_INFO; MSG_DEBUG; /*/
 	g_mux_usb_print_level = MSG_INFO;
+#ifdef DUMP_FRAME
 	g_mux_usb_dump_frame = 0;
+	g_mux_usb_dump_seq = 0;
 	g_mux_usb_dump_user_data = 0;
+#endif
 
 #ifdef PROC_DEBUG_MUX_STAT
 	ts27010_mux_usb_mux_stat_clear();

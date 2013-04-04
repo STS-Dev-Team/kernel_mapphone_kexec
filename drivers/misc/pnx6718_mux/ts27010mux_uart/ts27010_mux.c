@@ -64,6 +64,7 @@
 #include <linux/bitops.h>
 #include <linux/fs.h>
 #include <linux/tty.h>
+#include <linux/radio_ctrl/g4852_ctrl.h>
 
 #include <asm/system.h>
 
@@ -101,6 +102,7 @@ enum recv_state {
 struct tty_struct *ts27010mux_uart_tty;
 struct workqueue_struct *g_mux_uart_queue;
 
+static int def_ts0710_mtu = DEF_TS0710_MTU;
 
 /* there are 14 MUX UART channel and 13 MUX UART TTY device */
 /* Mapping from TTY NO to DLCI */
@@ -118,6 +120,14 @@ static u8 crctable[256];
 static struct ts0710_con ts0710_connection;
 
 extern struct tty_struct *ts27010_uart_tty_table[TS0710_MAX_MUX + 1];
+
+#define G4852_PS_SEND_RINGBUF_SIZE	0x20000
+#define PS_DATA_BUF_SIZE		0x1000
+static u8 ps_send_buf[PS_DATA_BUF_SIZE];
+static struct ts27010_ringbuf *ps_send_ringbuf;
+static spinlock_t ps_send_lock;
+static struct delayed_work ps_send_work;
+static struct workqueue_struct *ps_send_queue;
 
 static int ts0710_valid_dlci(u8 dlci)
 {
@@ -154,7 +164,7 @@ static int ts0710_valid_sn(u8 sn)
 {
 	/* ACK correct: sn should be in 0x00 ~ 0x3F */
 	/* ACK error: sn should be in 0x80 ~ 0xBF */
-	if (sn & MAX_TRANS_SN)
+	if (sn != INDIFFERENT_SN && sn & MAX_TRANS_SN)
 		return 0;
 	else
 		return 1;
@@ -354,7 +364,7 @@ static void ts0710_reset_dlci_data(struct dlci_struct *d)
 	d->state = DISCONNECTED;
 	d->flow_control = 0;
 	d->clients = 0;
-	d->mtu = DEF_TS0710_MTU;
+	d->mtu = def_ts0710_mtu;
 	d->initiator = 0;
 
 	FUNC_EXIT();
@@ -662,7 +672,7 @@ static void ts27010_handle_test(struct ts0710_con *ts0710, u8 type,
 		u8 *data;
 		int i;
 
-		data = (u8 *)kmalloc(len, GFP_KERNEL);
+		data = kmalloc(len, GFP_KERNEL);
 		if (!data) {
 			mux_print(MSG_WARNING,
 				"not enough memory for test data: %d\n", len);
@@ -733,22 +743,22 @@ static void ts27010_handle_msc(struct ts0710_con *ts0710, u8 type,
 		mux_print(MSG_INFO, "received modem status command\n");
 		if (v24_sigs & FC) {
 			if (d->state == CONNECTED) {
-				mux_print(MSG_WARNING,
+				mux_print(MSG_ERROR,
 					"flow off on dlci %d\n", dlci);
 				d->state = FLOW_STOPPED;
 			} else {
-				mux_print(MSG_WARNING,
+				mux_print(MSG_ERROR,
 					"flow off on dlci %d but state: %d\n",
 					dlci, d->state);
 			}
 		} else {
 			if (d->state == FLOW_STOPPED) {
 				d->state = CONNECTED;
-				mux_print(MSG_WARNING,
+				mux_print(MSG_ERROR,
 					"flow on on dlci %d\n", dlci);
 				wake_up_interruptible(&d->mux_write_wait);
 			} else {
-				mux_print(MSG_WARNING,
+				mux_print(MSG_ERROR,
 					"flow on on dlci %d but state: %d\n",
 					dlci, d->state);
 			}
@@ -1820,7 +1830,8 @@ static int do_tty_write_wakeup(
 	return 0;
 }
 
-int ts27010_mux_uart_line_write(int line, const unsigned char *buf, int count)
+
+static int ts27010_mux_uart_write(int line, const unsigned char *buf, int count)
 {
 	struct ts0710_con *ts0710 = &ts0710_connection;
 	int err = -EINVAL;
@@ -1829,9 +1840,6 @@ int ts27010_mux_uart_line_write(int line, const unsigned char *buf, int count)
 	int sent = 0;
 
 	FUNC_ENTER();
-
-	if (count <= 0)
-		return 0;
 
 	dlci = tty2dlci[line];
 	if (!ts0710_valid_dlci(dlci)) {
@@ -1867,7 +1875,7 @@ int ts27010_mux_uart_line_write(int line, const unsigned char *buf, int count)
 			}
 		}
 		if (ts0710->dlci[dlci].state == FLOW_STOPPED) {
-			mux_print(MSG_INFO,
+			mux_print(MSG_ERROR,
 				"Flow stoppedon /dev/mux%d\n",
 				line);
 			wait_event_interruptible(
@@ -1922,6 +1930,83 @@ ERR:
 	return err;
 }
 
+int ts27010_mux_uart_line_write(int line, const unsigned char *buf, int count)
+{
+	u32 header = 0;
+	unsigned long flags;
+
+	FUNC_ENTER();
+
+#define STE_G4852_PS_LINE1	8
+#define STE_G4852_PS_LINE2	9
+
+	if (count <= 0)
+		return 0;
+	if (modem_is_ste_g4852() &&
+		(line == STE_G4852_PS_LINE1 || line == STE_G4852_PS_LINE2)) {
+		spin_lock_irqsave(&ps_send_lock, flags);
+		if (ts27010_ringbuf_room(ps_send_ringbuf)
+				>= (count + sizeof(u32))) {
+			header = (line << 16) | count;
+			ts27010_ringbuf_write(ps_send_ringbuf,
+				(u8 *)&header, sizeof(u32));
+			ts27010_ringbuf_write(ps_send_ringbuf, buf, count);
+		} else
+			count = -EAGAIN;
+		spin_unlock_irqrestore(&ps_send_lock, flags);
+
+		mux_print(MSG_ERROR, "header=%x\n", header);
+		if (count > 0)
+			queue_delayed_work_on(0, ps_send_queue,
+					&ps_send_work, 0);
+		return count;
+	}
+	return ts27010_mux_uart_write(line, buf, count);
+}
+
+static void ts27010_mux_uart_send_ps(struct work_struct *work)
+{
+	int line, count, n, sent;
+	u32 header;
+	unsigned long flags;
+	int err, level;
+
+	while (1) {
+		spin_lock_irqsave(&ps_send_lock, flags);
+		level = ts27010_ringbuf_level(ps_send_ringbuf);
+		mux_print(MSG_ERROR, "level=%x\n", level);
+		if (level > 0) {
+			ts27010_ringbuf_read(ps_send_ringbuf, 0,
+				(u8 *)&header, sizeof(u32));
+			ts27010_ringbuf_consume(ps_send_ringbuf, sizeof(u32));
+			spin_unlock_irqrestore(&ps_send_lock, flags);
+		} else {
+			spin_unlock_irqrestore(&ps_send_lock, flags);
+			break;
+		}
+
+
+		mux_print(MSG_ERROR, "header=%x\n", header);
+		line = (header & 0xFFFF0000) >> 16;
+		count = header & 0xFFFF;
+		sent = 0;
+		while (sent < count) {
+			n = min(count - sent, PS_DATA_BUF_SIZE);
+
+			spin_lock_irqsave(&ps_send_lock, flags);
+			ts27010_ringbuf_read(ps_send_ringbuf, 0,
+					ps_send_buf, n);
+			ts27010_ringbuf_consume(ps_send_ringbuf, n);
+			spin_unlock_irqrestore(&ps_send_lock, flags);
+
+			err = ts27010_mux_uart_write(line, ps_send_buf, n);
+			mux_print(MSG_ERROR, "%x bytes sent\n", err);
+			sent += n;
+		}
+	}
+}
+
+
 #define TS0710MUX_MAX_CHARS_IN_BUF 65535
 
 int ts27010_mux_uart_line_chars_in_buffer(int line)
@@ -1936,7 +2021,7 @@ int ts27010_mux_uart_line_chars_in_buffer(int line)
 	dlci = tty2dlci[line];
 	if (!ts0710_valid_dlci(dlci)) {
 		mux_print(MSG_ERROR, "invalid DLCI %d\n", dlci);
-		goto out;
+		return -ENODEV;
 	}
 	if (ts0710->dlci[0].state == FLOW_STOPPED) {
 		mux_print(MSG_WARNING, "Flow stopped on all channels,"
@@ -1948,7 +2033,7 @@ int ts27010_mux_uart_line_chars_in_buffer(int line)
 		goto out;
 	} else if (ts0710->dlci[dlci].state != CONNECTED) {
 		mux_print(MSG_ERROR, "DLCI %d not connected\n", dlci);
-		goto out;
+		return -EBADF;
 	}
 
 	retval = 0;
@@ -1982,7 +2067,7 @@ int ts27010_mux_uart_line_write_room(int line)
 	dlci = tty2dlci[line];
 	if (!ts0710_valid_dlci(dlci)) {
 		mux_print(MSG_ERROR, "invalid DLCI %d\n", dlci);
-		goto out;
+		return -ENODEV;
 	}
 	if (ts0710->dlci[0].state == FLOW_STOPPED) {
 		mux_print(MSG_WARNING,
@@ -1993,7 +2078,7 @@ int ts27010_mux_uart_line_write_room(int line)
 		goto out;
 	} else if (ts0710->dlci[dlci].state != CONNECTED) {
 		mux_print(MSG_ERROR, "DLCI %d not connected\n", dlci);
-		goto out;
+		return -EBADF;
 	}
 
 	retval = ts0710->dlci[dlci].mtu;
@@ -2071,7 +2156,7 @@ static int ts27010_send_test_cmd(struct ts0710_con *ts0710)
 		}
 	} else {
 		ts0710->be_testing = 1;	/* Set the flag */
-		d_buf = (u8 *)kmalloc(TEST_PATTERN_SIZE, GFP_KERNEL);
+		d_buf = kmalloc(TEST_PATTERN_SIZE, GFP_KERNEL);
 		if (!d_buf) {
 			ts0710->test_errs = TEST_PATTERN_SIZE;
 			retval = -ENOMEM;
@@ -2226,6 +2311,7 @@ void ts27010_mux_uart_mux_close(void)
 			 */
 		}
 		ts0710_reset_dlci_data(d);
+		ts27010_tty_uart_reset_tty(dlci2tty[j]);
 		/*/
 		wake_up_interruptible(&d->open_wait);
 		wake_up_interruptible(&d->close_wait);
@@ -2414,6 +2500,14 @@ void ts27010_mux_uart_recv(struct ts27010_ringbuf *rbuf)
 			} else {
 				fcs = ts0710_crc_calc(fcs, c);
 				sn = c;
+#ifdef DUMP_FRAME
+				if (g_mux_uart_dump_seq && control == 0xEF)
+					mux_print(MSG_INFO, "recv sn 0x%x\n",
+						sn);
+				else
+					mux_print(MSG_DEBUG, "recv sn 0x%x\n",
+						sn);
+#endif
 				mux_print(MSG_MSGDUMP,
 					"state transit: %02x SN->LEN\n", sn);
 #endif /* TS27010_UART_RETRAN */
@@ -2426,6 +2520,12 @@ void ts27010_mux_uart_recv(struct ts27010_ringbuf *rbuf)
 			len = c >> 1;
 			if (c & 0x1) {
 				data_idx = i + 1;
+				if ((len + data_idx + 1) >= count) {
+					mux_print(MSG_DEBUG,
+						"partial frame : %d-%d-%d, "
+						"wait ...\n", len,
+						len + data_idx + 1, count);
+				}
 				mux_print(MSG_MSGDUMP,
 					"state transit: %02x LEN->DATA\n",
 					len);
@@ -2444,7 +2544,7 @@ void ts27010_mux_uart_recv(struct ts27010_ringbuf *rbuf)
 			data_idx = i + 1;
 			/* FCS: (len + data_idx) */
 			/* End F9: (len + data_idx + 1) */
-			if (len > DEF_TS0710_MTU) {
+			if (len > def_ts0710_mtu) {
 				/*
 				 * huge frame, discard the fisrt F9
 				 */
@@ -2462,7 +2562,7 @@ void ts27010_mux_uart_recv(struct ts27010_ringbuf *rbuf)
 				break;
 			} else if ((len + data_idx + 1) >= count) {
 				mux_print(MSG_DEBUG,
-					"unintegrated frame: %d-%d-%d, "
+					"partial frame: %d-%d-%d, "
 					"wait ...\n",
 					len, len + data_idx + 1, count);
 			}
@@ -2582,12 +2682,18 @@ static int __init mux_init(void)
 
 	/*/ MSG_MSGDUMP; MSG_INFO; MSG_DEBUG; /*/
 	g_mux_uart_print_level = MSG_INFO;
+#ifdef DUMP_FRAME
 	g_mux_uart_dump_frame = 0;
+	g_mux_uart_dump_seq = 0;
 	g_mux_uart_dump_user_data = 0;
+#endif
 
 #ifdef PROC_DEBUG_MUX_STAT
 	ts27010_mux_uart_mux_stat_clear();
 #endif
+
+	if (modem_is_ste_g4852())
+		def_ts0710_mtu = 256;
 
 	/* init channels state and some locks */
 	ts0710_init(&ts0710_connection);
@@ -2624,6 +2730,22 @@ static int __init mux_init(void)
 		goto err1;
 	}
 
+	if (modem_is_ste_g4852()) {
+		ps_send_ringbuf = ts27010_ringbuf_alloc( \
+		G4852_PS_SEND_RINGBUF_SIZE - sizeof(struct ts27010_ringbuf));
+		if (!ps_send_ringbuf) {
+			mux_print(MSG_ERROR, "Fail to get ring buffer.\n");
+			goto err1;
+		}
+		ps_send_lock = __SPIN_LOCK_UNLOCKED(ps_send_lock);
+		INIT_DELAYED_WORK(&ps_send_work, ts27010_mux_uart_send_ps);
+		ps_send_queue = create_workqueue("PS_send_over_uart_queue");
+		if (!ps_send_queue) {
+			mux_print(MSG_ERROR, "Create mux send queue failed!\n");
+			return -ENOMEM;
+		}
+	}
+
 	mux_print(MSG_INFO, "mux over UART registered\n");
 
 	FUNC_EXIT();
@@ -2644,6 +2766,8 @@ static void __exit mux_exit(void)
 	ts27010_tty_uart_remove();
 	ts27010_ldisc_uart_remove();
 	destroy_workqueue(g_mux_uart_queue);
+	if (modem_is_ste_g4852())
+		destroy_workqueue(ps_send_queue);
 
 	mux_print(MSG_INFO, "mux over UART unregistered\n");
 	FUNC_EXIT();

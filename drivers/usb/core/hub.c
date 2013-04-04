@@ -24,6 +24,9 @@
 #include <linux/kthread.h>
 #include <linux/mutex.h>
 #include <linux/freezer.h>
+#ifdef CONFIG_USB_SERIAL_PNX6718
+#include "../../../arch/arm/mach-omap2/board-mapphone.h"
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
@@ -35,6 +38,10 @@
 #ifndef CONFIG_USB_ANNOUNCE_NEW_DEVICES
 #define CONFIG_USB_ANNOUNCE_NEW_DEVICES
 #endif
+#endif
+#ifdef CONFIG_USB_SERIAL_PNX6718
+extern void modem_preresume(void);
+extern void modem_presuspend(void);
 #endif
 
 struct usb_hub {
@@ -1651,11 +1658,14 @@ void usb_disconnect(struct usb_device **pdev)
 {
 	struct usb_device	*udev = *pdev;
 	int			i;
-
+	struct usb_hcd		*hcd;
+	
 	if (!udev) {
 		pr_debug ("%s nodev\n", __func__);
 		return;
 	}
+	
+	hcd = bus_to_hcd(udev->bus);	
 
 	/* mark the device as inactive, so any further urb submissions for
 	 * this device (and any of its children) will fail immediately.
@@ -1678,7 +1688,15 @@ void usb_disconnect(struct usb_device **pdev)
 	 * so that the hardware is now fully quiesced.
 	 */
 	dev_dbg (&udev->dev, "unregistering device\n");
+#ifdef CONFIG_USB_SERIAL_PNX6718
+	if (!modem_is_ste_pnx6718())
+#endif
+		mutex_lock(hcd->bandwidth_mutex);
 	usb_disable_device(udev, 0);
+#ifdef CONFIG_USB_SERIAL_PNX6718
+	if (!modem_is_ste_pnx6718())
+#endif
+		mutex_unlock(hcd->bandwidth_mutex);
 	usb_hcd_synchronize_unlinks(udev);
 
 	usb_remove_ep_devs(&udev->ep0);
@@ -2391,6 +2409,10 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 				(msg.event & PM_EVENT_AUTO ? "auto-" : ""));
 		usb_set_device_state(udev, USB_STATE_SUSPENDED);
 		msleep(10);
+#ifdef CONFIG_USB_SERIAL_PNX6718
+		if (modem_is_ste_pnx6718())
+			modem_presuspend();
+#endif
 	}
 	usb_mark_last_busy(hub->hdev);
 	return status;
@@ -2539,6 +2561,10 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 	// dev_dbg(hub->intfdev, "resume port %d\n", port1);
 
 	set_bit(port1, hub->busy_bits);
+#ifdef CONFIG_USB_SERIAL_PNX6718
+	if (modem_is_ste_pnx6718())
+		modem_preresume();
+#endif
 
 	/* see 7.1.7.7; affects power usage, but not budgeting */
 	if (hub_is_superspeed(hub->hdev))
@@ -2556,6 +2582,18 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		dev_dbg(&udev->dev, "usb %sresume\n",
 				(msg.event & PM_EVENT_AUTO ? "auto-" : ""));
 		msleep(25);
+
+#ifdef CONFIG_USB_SERIAL_PNX6718
+		/* Fix me: usb ipc often disconnect after AP resume bus.
+		 * It's difficult to judge which side cause issue, software or
+		 * hardware, ap or bp. Before find root cause, I'll change K
+		 * signal to 100ms when resume bus.
+		 */
+		if (modem_is_ste_pnx6718()) {
+			msleep(25);
+			printk(KERN_INFO "[%s]: myfunc 25ms\n", __func__);
+		}
+#endif
 
 		/* Virtual root hubs can trigger on GET_PORT_STATUS to
 		 * stop resume signaling.  Then finish the resume

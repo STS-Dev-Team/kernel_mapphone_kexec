@@ -171,6 +171,7 @@ struct usbhs_hcd_omap {
 
 const char usbhs_driver_name[] = USBHS_DRIVER_NAME;
 static u64 usbhs_dmamask = ~(u32)0;
+extern int  modem_is_ste_pnx6718(void);
 
 /*-------------------------------------------------------------------------*/
 
@@ -679,7 +680,10 @@ static int usbhs_runtime_resume(struct device *dev)
 		return  -ENODEV;
 	}
 
-	wake_lock_timeout(&omap->usbhs_wakelock, MAX_WAKELOCK_TIME);
+	if (!modem_is_ste_pnx6718())
+		wake_lock_timeout(&omap->usbhs_wakelock, MAX_WAKELOCK_TIME);
+	else
+		wake_lock_timeout(&omap->usbhs_wakelock, HZ);
 	if (is_omap_usbhs_rev2(omap)) {
 		if (is_ehci_tll_mode(pdata->port_mode[0])) {
 			clk_enable(omap->usbhost_p1_fck);
