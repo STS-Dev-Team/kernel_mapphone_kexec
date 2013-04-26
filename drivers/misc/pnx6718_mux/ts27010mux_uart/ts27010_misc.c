@@ -50,8 +50,11 @@
 #ifdef DEBUG
 /***************************** mux log ********************************/
 int g_mux_uart_print_level;
+#ifdef DUMP_FRAME
 int g_mux_uart_dump_frame;
+int g_mux_uart_dump_seq;
 int g_mux_uart_dump_user_data;
+#endif
 
 static u8 s_hexdump_buf[TS0710MUX_SEND_BUF_SIZE * 3 + 2 + 64];
 
@@ -169,10 +172,15 @@ static int mux_proc_read(char *page, char **start, off_t off,
 		return 0;
 	}
 
+#ifdef DUMP_FRAME
 	len += sprintf(page + len,
-		"print_level: %d, dump_frame: %d, dump_user_data: %d\n",
+		"print_level: %d, dump_frame: %d, "
+		"dump_user_data: %d, dump_seq: %d\n",
 		g_mux_uart_print_level, g_mux_uart_dump_frame,
-		g_mux_uart_dump_user_data);
+		g_mux_uart_dump_user_data, g_mux_uart_dump_seq);
+#else
+	len += sprintf(page + len, "print_level: %d\n", g_mux_uart_print_level);
+#endif
 
 	return len;
 }
@@ -209,6 +217,7 @@ static ssize_t mux_proc_write(struct file *flip, const char __user *buff,
 				"and the log level should be 0~%d",
 				(int)para, MSG_NONE);
 		}
+#ifdef DUMP_FRAME
 		startp = endp + 1;
 		para = simple_strtoul(startp, &endp, 10);
 		if (endp == startp) {
@@ -217,6 +226,7 @@ static ssize_t mux_proc_write(struct file *flip, const char __user *buff,
 		}
 		g_mux_uart_dump_frame = para ? 1 : 0;
 		mux_print(MSG_INFO, "dump_frame=%d", g_mux_uart_dump_frame);
+
 		startp = endp + 1;
 		para = simple_strtoul(startp, &endp, 10);
 		if (endp == startp) {
@@ -227,6 +237,15 @@ static ssize_t mux_proc_write(struct file *flip, const char __user *buff,
 		mux_print(MSG_INFO, "dump_user_data=%d",
 			g_mux_uart_dump_user_data);
 
+		startp = endp + 1;
+		para = simple_strtoul(startp, &endp, 10);
+		if (endp == startp) {
+			ret = count;
+			goto err;
+		}
+		g_mux_uart_dump_seq = para ? 1 : 0;
+		mux_print(MSG_INFO, "dump_seq=%d", g_mux_uart_dump_seq);
+#endif
 		ret = count;
 	}
 err:
@@ -292,8 +311,7 @@ struct sequence_number_t *ts27010_sequence_number_alloc(void)
 	struct sequence_number_t *seq_no = NULL;
 	FUNC_ENTER();
 
-	seq_no = (struct sequence_number_t *)kzalloc(
-		sizeof(*seq_no), GFP_KERNEL);
+	seq_no = kzalloc(sizeof(*seq_no), GFP_KERNEL);
 	if (seq_no == NULL) {
 		mux_print(MSG_WARNING, "request memory failed\n");
 	} else {
@@ -349,8 +367,7 @@ struct ts27010_timer_para_t *ts27010_alloc_timer_para(
 	struct ts27010_timer_para_t *timer_para = NULL;
 	FUNC_ENTER();
 
-	timer_para = (struct ts27010_timer_para_t *)kzalloc(
-		sizeof(*timer_para), GFP_KERNEL);
+	timer_para = kzalloc(sizeof(*timer_para), GFP_KERNEL);
 	if (timer_para == NULL) {
 		mux_print(MSG_WARNING, "request memory failed\n");
 	} else {
@@ -507,13 +524,13 @@ inline u8 ts27010_slidewindow_tail(struct ts27010_slide_window_t *sldwin)
 inline u8 ts27010_slidewindow_set_tail(
 	struct ts27010_slide_window_t *sldwin, u8 val)
 {
-	if (sldwin->m_tail < slidwin->m_head) {
-		WARN_ON(val > slidwin->m_head || val <= slidwind->m_tail);
-	} else if (sldwin->m_tail > slidwin->m_head) {
-		WARN_ON(val > slidwin->m_head && val <= slidwind->m_tail);
-	} else {
-		WARN_ON(val != slidwin->m_tail);
-	}
+	if (sldwin->m_tail < sldwin->m_head)
+		WARN_ON(val > sldwin->m_head || val <= sldwin->m_tail);
+	else if (sldwin->m_tail > sldwin->m_head)
+		WARN_ON(val > sldwin->m_head && val <= sldwin->m_tail);
+	else
+		WARN_ON(val != sldwin->m_tail);
+
 	sldwin->m_tail = val % SLIDE_WINDOWS_SIZE_AP;
 	return val;
 }
@@ -658,8 +675,7 @@ struct ts27010_slide_window_t *ts27010_slidewindow_alloc(
 	struct ts27010_slide_window_t *slide_window;
 	FUNC_ENTER();
 
-	slide_window = (struct ts27010_slide_window_t *)kzalloc(
-		sizeof(*slide_window), GFP_KERNEL);
+	slide_window = kzalloc(sizeof(*slide_window), GFP_KERNEL);
 	if (slide_window == NULL) {
 		mux_print(MSG_WARNING, "request memory failed\n");
 		slide_window = NULL;
@@ -778,7 +794,7 @@ EXIT:
 u8 ts27010_slidewindow_is_sn_in(
 	struct ts27010_slide_window_t *slide_window, u8 sn)
 {
-	u8 number = sn & 0x7F; /* remove error flag */
+	u8 number = sn & INDIFFERENT_SN; /* remove error flag */
 	struct ts27010_retran_info_t *retran_info;
 	u8 index;
 	FUNC_ENTER();

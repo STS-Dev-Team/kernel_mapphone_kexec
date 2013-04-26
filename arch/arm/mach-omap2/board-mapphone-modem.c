@@ -19,10 +19,13 @@
 #include <linux/radio_ctrl/mdm9600_ctrl.h>
 #include <linux/radio_ctrl/wrigley_ctrl.h>
 #include <linux/radio_ctrl/qsc6085_ctrl.h>
+#include <linux/radio_ctrl/pnx6718_ctrl.h>
+#include <linux/radio_ctrl/g4852_ctrl.h>
 #include <linux/slab.h>
 #include <linux/kdev_t.h>
 #include <linux/err.h>
 #include <asm/bootinfo.h>
+#include "board-mapphone.h"
 
 #include <linux/of_fdt.h>
 #include <linux/of.h>
@@ -32,6 +35,8 @@
 #define MAPPHONE_BP_MDM6600	0x001E0001
 #define MAPPHONE_BP_MDM9600	0x001E0002
 #define MAPPHONE_BP_STE_M570	0x00240000
+#define MAPPHONE_BP_STE_G4852	0x00240001
+#define MAPPHONE_BP_STE_PNX6718	0x00240002
 #define MAPPHONE_BP_W3GLTE	0x0003000F
 
 #define MAX_MODEMS		2
@@ -238,6 +243,52 @@ static struct platform_device qsc6085_ctrl_platform_device = {
 	},
 };
 
+static struct pnx6718_ctrl_platform_data pnx6718_ctrl_platform_data = {
+	.gpio_bp_on_key = GPIO_TD_BP_ON_KEY,
+	.gpio_bp_wdi = GPIO_TD_BP_WDI,
+	.gpio_bp_reset = GPIO_TD_BP_RESET,
+	.gpio_bp_flash_en = GPIO_TD_BP_FLASH_EN,
+	.gpio_bp_force_down = GPIO_TD_BP_FORCE_DOWN,
+};
+
+static struct platform_device pnx6718_ctrl_platform_device = {
+	.name = "td_bp_ctrl",
+	.id = -1,
+	.dev = {
+		.platform_data = &pnx6718_ctrl_platform_data,
+	},
+};
+
+static struct g4852_ctrl_platform_data g4852_ctrl_platform_data = {
+	.name = "g4852",
+};
+
+static struct platform_device g4852_ctrl_platform_device = {
+	.name = G4852_CTRL_MODULE_NAME,
+	.id = -1,
+	.dev = {
+		.platform_data = &g4852_ctrl_platform_data,
+	},
+};
+
+static int is_ste_g4852;
+
+int modem_is_ste_g4852(void)
+{
+	return is_ste_g4852;
+}
+
+static int dmds_phone;
+int is_dmds_phone(void)
+{
+	return dmds_phone;
+}
+static int is_ste_pnx6718;
+int modem_is_ste_pnx6718(void)
+{
+	return is_ste_pnx6718;
+}
+
 static int mapphone_bp_get_count(void)
 {
 	struct device_node *node;
@@ -258,7 +309,21 @@ static int mapphone_bp_get_count(void)
 
 	return DEFAULT_MODEM_COUNT;
 }
+void sync_bp_datetime(void)
+{
+	int i = 0;
+	char *argv[2];
+	char *envp[3];
 
+	argv[0] = "/system/bin/sync_clock-ril-gsm";
+	argv[1] = 0;
+	envp[i++] = "HOME=/";
+	envp[i++] = "PATH=/sbin:/system/sbin:/system/bin:/data/bin";
+	envp[i++] = 0;
+	i = call_usermodehelper(argv[0], argv, envp, 0);
+	printk(KERN_INFO "%s return %d\n", __func__, i);
+}
+EXPORT_SYMBOL(sync_bp_datetime);
 
 static int mapphone_bp_get_type(u8 modem)
 {
@@ -440,6 +505,8 @@ static int mapphone_mdm6600_mdm_ctrl_init(void)
 	}
 	mdm6600_ctrl_platform_data.cmd_gpios.cmd2 = gpio;
 	platform_device_register(&mdm6600_ctrl_platform_device);
+
+	dmds_phone = !strcmp(bp_model, "DUALMODE");
 	return 0;
 }
 
@@ -577,6 +644,83 @@ static int mapphone_qsc6085_mdm_ctrl_init(void)
 	qsc6085_ctrl_platform_data.gpio_reset_out = gpio;
 
 	platform_device_register(&qsc6085_ctrl_platform_device);
+	return 0;
+}
+
+static int mapphone_ste_pnx6718_mdm_ctrl_init(void)
+{
+	is_ste_pnx6718 = 1;
+
+	platform_device_register(&pnx6718_ctrl_platform_device);
+
+	printk(KERN_INFO "6718 initialization Finished.\n");
+	return 0;
+}
+
+static int mapphone_ste_g4852_mdm_ctrl_init(void)
+{
+	int gpio;
+
+	is_ste_g4852 = 1;
+
+	gpio = get_gpio_by_name("gsm_pwron");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get gsm_pwron "
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.gsm_pwron = gpio;
+
+	gpio = get_gpio_by_name("ap_reset_gsm");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get ap_reset_gsm "
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.ap_reset_gsm = gpio;
+
+	gpio = get_gpio_by_name("gsm_flash_en");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get gsm_flash_en "
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.gsm_flash_en = gpio;
+
+	gpio = get_gpio_by_name("gsm_panic");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get gsm_panic "
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.gsm_panic = gpio;
+
+	gpio = get_gpio_by_name("gsm_status1");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get gsm_status1 "
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.gsm_status1 = gpio;
+
+	gpio = get_gpio_by_name("bplog_to_ap_en");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get bplog_to_ap_en"
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.bplog_to_ap_en = gpio;
+
+
+	gpio = get_gpio_by_name("bplog_to_jtag_en");
+	if (gpio < 0) {
+		printk(KERN_ERR "%s: can't get bplog_to_jtag_en "
+				"from device_tree\n", __func__);
+		return -EINVAL;
+	}
+	g4852_ctrl_platform_data.bplog_to_jtag_en = gpio;
+
+	platform_device_register(&g4852_ctrl_platform_device);
 	return 0;
 }
 
@@ -841,8 +985,8 @@ static inline void mapphone_bpwake_init(void)
 	if (mapphone_bpwake_gpio >= 0) {
 		mdm6600_ctrl_platform_data.mapphone_bpwake_device =
 			&mapphone_bpwake_device;
-		platform_device_register(&mapphone_bpwake_device);
 	}
+	platform_device_register(&mapphone_bpwake_device);
 }
 
 int __init mapphone_mdm_ctrl_init(void)
@@ -883,6 +1027,14 @@ int __init mapphone_mdm_ctrl_init(void)
 		case MAPPHONE_BP_STE_M570:
 			pr_debug("Found Modem MAPPHONE_BP_STE_M570");
 			ret = mapphone_ste_m570_mdm_ctrl_init();
+			break;
+		case MAPPHONE_BP_STE_G4852:
+			pr_debug("Found Modem MAPPHONE_BP_STE_G4852");
+			ret = mapphone_ste_g4852_mdm_ctrl_init();
+			break;
+		case MAPPHONE_BP_STE_PNX6718:
+			pr_debug("Found Modem MAPPHONE_BP_STE_PNX6718");
+			ret = mapphone_ste_pnx6718_mdm_ctrl_init();
 			break;
 		case MAPPHONE_BP_W3GLTE:
 			pr_debug("Found Modem MAPPHONE_BP_W3GLTE");
