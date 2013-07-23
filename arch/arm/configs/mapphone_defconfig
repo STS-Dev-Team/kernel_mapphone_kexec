@@ -446,10 +446,10 @@ CONFIG_ARM_FLUSH_CONSOLE_ON_RESTART=y
 CONFIG_USE_OF=y
 CONFIG_ZBOOT_ROM_TEXT=0
 CONFIG_ZBOOT_ROM_BSS=0
-CONFIG_CMDLINE="omap_wdt.timer_margin=60 oops=panic"
+CONFIG_CMDLINE="root=/dev/ram0 rw mem=1024M@0x80000000 console=null vram=10300K omapfb.vram=0:8256K,1:4K,2:2040K init=/init ip=off mmcparts=mmcblk1:p7(pds),p8(utags),p14(boot),p15(recovery),p16(cdrom),p17(misc),p18(cid),p19(kpanic),p20(system),p21(cache),p22(preinstall),p23(webtop),p24(userdata),p25(emstorage) mot_sst=1 androidboot.bootloader=0x0A74"
 # CONFIG_CMDLINE_FROM_BOOTLOADER is not set
-CONFIG_CMDLINE_EXTEND=y
-# CONFIG_CMDLINE_FORCE is not set
+# CONFIG_CMDLINE_EXTEND is not set
+CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
 # CONFIG_CRASH_DUMP is not set
@@ -3015,7 +3015,7 @@ CONFIG_KEYS_DEBUG_PROC_KEYS=y
 CONFIG_TF_ZEBRA=y
 CONFIG_SECURITY_MIDDLEWARE_COMPONENT=y
 # CONFIG_SMC_KERNEL_CRYPTO is not set
-CONFIG_SECURE_TRACE=y
+# CONFIG_SECURE_TRACE is not set
 # CONFIG_TF_DRIVER_DEBUG_SUPPORT is not set
 CONFIG_DEFAULT_SECURITY_DAC=y
 CONFIG_DEFAULT_SECURITY=""
@@ -3125,6 +3125,7 @@ CONFIG_CRYPTO_HW=y
 # CONFIG_BINARY_PRINTF is not set
 
 #
+CONFIG_MODULE_EXTRA_COPY=y
 # Library routines
 #
 CONFIG_BITREVERSE=y
